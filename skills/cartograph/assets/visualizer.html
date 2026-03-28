@@ -1319,6 +1319,212 @@
         background: var(--surface);
       }
 
+      /* -- Invariants Tab -- */
+      .invariants-content {
+        flex: 1;
+        padding: 24px;
+        overflow-y: auto;
+      }
+      .invariants-summary-bar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 16px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-bottom: 20px;
+        font-size: 13px;
+      }
+      .invariants-summary-stat {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .invariants-summary-stat.passing { color: var(--green); }
+      .invariants-summary-stat.failing { color: var(--red); }
+      .invariants-summary-stat.skipped { color: var(--text-muted); }
+      .invariants-card {
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .invariants-card:hover {
+        border-color: var(--border-hover);
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .invariants-card.expanded {
+        border-color: var(--pm-accent);
+        background: var(--pm-accent-dim);
+      }
+      .invariants-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .invariants-status-icon {
+        font-size: 14px;
+        flex-shrink: 0;
+        font-weight: 700;
+      }
+      .invariants-status-icon.pass { color: var(--green); }
+      .invariants-status-icon.fail { color: var(--red); }
+      .invariants-status-icon.skipped { color: var(--text-muted); }
+      .invariants-card-title {
+        font-weight: 600;
+        font-size: 14px;
+        flex: 1;
+      }
+      .invariants-severity {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .invariants-severity.critical {
+        color: var(--red);
+        background: var(--red-dim);
+      }
+      .invariants-severity.high {
+        color: var(--orange);
+        background: var(--orange-dim);
+      }
+      .invariants-severity.low {
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .invariants-card-summary {
+        margin-top: 6px;
+        font-size: 13px;
+        color: var(--text-muted);
+        padding-left: 24px;
+      }
+      .invariants-card-tags {
+        display: flex;
+        gap: 4px;
+        margin-top: 6px;
+        padding-left: 24px;
+        flex-wrap: wrap;
+      }
+      .invariants-tag {
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-dim);
+        border: 1px solid var(--border);
+      }
+      .invariants-expanded-detail {
+        margin-top: 14px;
+        padding-top: 14px;
+        padding-left: 24px;
+        border-top: 1px solid var(--border);
+      }
+      .invariants-detail-section {
+        margin-bottom: 12px;
+      }
+      .invariants-detail-section-title {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+      .invariants-checked-files {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.6;
+      }
+      .invariants-violation {
+        padding: 10px 12px;
+        background: var(--red-dim);
+        border: 1px solid rgba(205, 92, 92, 0.2);
+        border-radius: var(--radius);
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+      .invariants-violation-file {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--red);
+        margin-bottom: 4px;
+      }
+      .invariants-violation-expected,
+      .invariants-violation-found,
+      .invariants-violation-suggestion {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-bottom: 2px;
+      }
+      .invariants-violation-label {
+        font-weight: 600;
+        color: var(--text);
+      }
+      .invariants-prompt-block {
+        position: relative;
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 12px;
+        padding-top: 36px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text-muted);
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .invariants-copy-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        padding: 4px 10px;
+        font-family: var(--mono);
+        font-size: 11px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .invariants-copy-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: var(--border-hover);
+      }
+      .invariants-surface-feature-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .invariants-tab-badge {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 5px;
+        border-radius: 999px;
+        margin-left: 4px;
+      }
+      .invariants-tab-badge.has-failures {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+      .invariants-tab-badge.all-passing {
+        background: var(--green-dim);
+        color: var(--green);
+      }
+
       /* -- Confidence & Kind badges -- */
       .badge-high {
         background: var(--green-dim);
@@ -2438,6 +2644,7 @@
             <div class="tab" data-tab="surfaces">Surfaces</div>
             <div class="tab" data-tab="features">Features</div>
             <div class="tab" data-tab="flows">Flows</div>
+            <div class="tab" data-tab="invariants" id="invariants-tab" style="display:none">Invariants<span id="invariants-tab-badge"></span></div>
           </div>
         </div>
         <div class="tab-cluster" data-group="eng">
@@ -2500,6 +2707,13 @@
             <div class="panel" id="flows-panel" style="flex-direction: row">
               <div class="flow-content" id="flow-content">
                 <div class="empty-state">Select a flow from the sidebar</div>
+              </div>
+            </div>
+
+            <!-- Invariants -->
+            <div class="panel" id="invariants-panel" style="flex-direction: row">
+              <div class="invariants-content" id="invariants-content">
+                <div class="empty-state">No invariant data</div>
               </div>
             </div>
 
@@ -2639,6 +2853,7 @@
       let engHealthMetricId = null;
       let engHealthHoveredFindingKey = null;
       let engHealthActiveFindingKey = null;
+      let expandedInvariantId = null;
       const ENG_TABS = new Set([
         "techstack",
         "featuremap",
@@ -2651,13 +2866,14 @@
         surfaces: "surfaces-panel",
         features: "features-panel",
         flows: "flows-panel",
+        invariants: "invariants-panel",
         techstack: "techstack-panel",
         featuremap: "filetree-panel",
         datamodel: "entities-panel",
         codeorg: "codemap-panel",
         codehealth: "codehealth-panel",
       };
-      const NO_SIDEBAR_TABS = new Set(["overview", "techstack", "codehealth"]);
+      const NO_SIDEBAR_TABS = new Set(["overview", "techstack", "codehealth", "invariants"]);
       const DEAD_CODE_KIND_ORDER = [
         "dead-file",
         "test-only-file",
@@ -2687,6 +2903,45 @@
         return DATA && DATA.codeHealth && Array.isArray(DATA.codeHealth.metrics)
           ? DATA.codeHealth.metrics
           : [];
+      }
+
+      // -- Invariants helpers --
+      function getInvariantsData() {
+        return DATA && DATA.invariants && Array.isArray(DATA.invariants.results)
+          ? DATA.invariants
+          : null;
+      }
+
+      function getInvariantsSorted() {
+        const inv = getInvariantsData();
+        if (!inv) return [];
+        const severityOrder = { critical: 0, high: 1, low: 2 };
+        const statusOrder = { fail: 0, pass: 1, skipped: 2 };
+        return [...inv.results].sort((a, b) => {
+          const statusDiff = (statusOrder[a.status] || 9) - (statusOrder[b.status] || 9);
+          if (statusDiff !== 0) return statusDiff;
+          return (severityOrder[a.severity] || 9) - (severityOrder[b.severity] || 9);
+        });
+      }
+
+      function toggleInvariantExpand(id) {
+        expandedInvariantId = expandedInvariantId === id ? null : id;
+        renderInvariantsTab();
+      }
+
+      function copyInvariantPrompt(id) {
+        const inv = getInvariantsData();
+        if (!inv) return;
+        const result = inv.results.find(r => r.id === id);
+        if (result && result.verificationPrompt) {
+          navigator.clipboard.writeText(result.verificationPrompt).then(() => {
+            const btn = document.querySelector(`[data-copy-invariant="${id}"]`);
+            if (btn) {
+              btn.textContent = "Copied!";
+              setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+            }
+          });
+        }
       }
 
       function getMetricState(metric) {
@@ -3427,6 +3682,32 @@
       }
 
       ${
+        getInvariantsData()
+          ? (() => {
+              const inv = getInvariantsData();
+              const s = inv.summary || {};
+              const allPass = s.failing === 0 && s.total > 0;
+              return `
+              <section>
+                <div class="overview-health-strip">
+                  <div class="overview-health-metrics">
+                    <div class="overview-health-metric" onclick="switchTab('invariants')">
+                      <span class="eng-health-score-dot metric-state-${allPass ? "green" : "red"}"></span>
+                      <span>Invariants ${s.passing}/${s.total} passing</span>
+                    </div>
+                    ${s.failing > 0 ? `<div class="overview-health-metric" onclick="switchTab('invariants')" style="color:var(--red)">
+                      <span>${s.failing} failing</span>
+                    </div>` : ""}
+                  </div>
+                  <div class="overview-health-link" onclick="switchTab('invariants')">View →</div>
+                </div>
+              </section>
+            `;
+            })()
+          : ""
+      }
+
+      ${
         (DATA.techStack || []).length
           ? `
         <section>
@@ -3926,11 +4207,136 @@
         stroke: "#5c584e",
       };
 
+      // -- Invariants rendering --
+      function updateInvariantsTabVisibility() {
+        const tab = document.getElementById("invariants-tab");
+        if (!tab) return;
+        const inv = getInvariantsData();
+        tab.style.display = inv ? "" : "none";
+        const badge = document.getElementById("invariants-tab-badge");
+        if (badge && inv) {
+          const s = inv.summary || {};
+          if (s.failing > 0) {
+            badge.className = "invariants-tab-badge has-failures";
+            badge.textContent = `${s.failing}/${s.total}`;
+          } else if (s.total > 0) {
+            badge.className = "invariants-tab-badge all-passing";
+            badge.textContent = `${s.passing}/${s.total}`;
+          } else {
+            badge.textContent = "";
+          }
+        }
+      }
+
+      function renderInvariantsTab() {
+        const content = document.getElementById("invariants-content");
+        if (!content) return;
+        const inv = getInvariantsData();
+        if (!inv || !inv.results.length) {
+          content.innerHTML = '<div class="empty-state">No invariants defined</div>';
+          return;
+        }
+        const summary = inv.summary || { total: 0, passing: 0, failing: 0, skipped: 0 };
+        const sorted = getInvariantsSorted();
+        content.innerHTML = `
+          <div class="invariants-summary-bar">
+            <span>${summary.total} invariant${summary.total === 1 ? "" : "s"}</span>
+            <span class="invariants-summary-stat passing">\u25CF ${summary.passing} passing</span>
+            <span class="invariants-summary-stat failing">\u25CF ${summary.failing} failing</span>
+            ${summary.skipped > 0 ? `<span class="invariants-summary-stat skipped">\u25CF ${summary.skipped} paused</span>` : ""}
+          </div>
+          <div>${sorted.map(r => renderInvariantCard(r)).join("")}</div>
+        `;
+      }
+
+      function renderInvariantCard(result) {
+        const isExpanded = expandedInvariantId === result.id;
+        const statusIcon = result.status === "pass" ? "\u2713" : result.status === "fail" ? "\u2717" : "\u23F8";
+        const tags = result.tags || [];
+        return `
+          <div class="invariants-card${isExpanded ? " expanded" : ""}" onclick="toggleInvariantExpand('${result.id}')">
+            <div class="invariants-card-header">
+              <span class="invariants-status-icon ${result.status}">${statusIcon}</span>
+              <span class="invariants-card-title">${esc(result.name)}</span>
+              <span class="invariants-severity ${result.severity}">${result.severity}</span>
+            </div>
+            ${result.summary ? `<div class="invariants-card-summary">${esc(result.summary)}</div>` : ""}
+            ${tags.length ? `<div class="invariants-card-tags">${tags.map(t => `<span class="invariants-tag">${esc(t)}</span>`).join("")}</div>` : ""}
+            ${isExpanded ? renderInvariantExpandedDetail(result) : ""}
+          </div>
+        `;
+      }
+
+      function renderInvariantExpandedDetail(result) {
+        if (result.status === "skipped") {
+          return `<div class="invariants-expanded-detail">
+            <div style="color:var(--text-muted);font-size:13px;">This invariant is paused (enabled: false).</div>
+          </div>`;
+        }
+        const evidence = result.evidence || {};
+        const checkedFiles = evidence.checkedFiles || [];
+        const violations = evidence.violations || [];
+        // Build surface/feature links
+        const surfaces = (result.surfaceIds || []).map(sid => (DATA.surfaces || []).find(s => s.id === sid)).filter(Boolean);
+        const features = (result.featureIds || []).map(fid => (DATA.features || []).find(f => f.id === fid)).filter(Boolean);
+        let surfaceLinks = "";
+        let featureLinks = "";
+        if (surfaces.length) {
+          surfaceLinks = `<div class="invariants-detail-section">
+            <div class="invariants-detail-section-title">Surfaces</div>
+            <div class="invariants-surface-feature-links">
+              ${surfaces.map(s => `<span class="feature-surface-chip" onclick="event.stopPropagation(); switchTab('surfaces'); setTimeout(() => selectSurface('${s.id}'), 50);">${esc(s.name)}</span>`).join("")}
+            </div>
+          </div>`;
+        }
+        if (features.length) {
+          featureLinks = `<div class="invariants-detail-section">
+            <div class="invariants-detail-section-title">Features</div>
+            <div class="invariants-surface-feature-links">
+              ${features.map(f => `<span class="feature-surface-chip" onclick="event.stopPropagation(); switchTab('features'); setTimeout(() => selectFeature('${f.id}'), 50);">${esc(f.name)}</span>`).join("")}
+            </div>
+          </div>`;
+        }
+        return `
+          <div class="invariants-expanded-detail" onclick="event.stopPropagation()">
+            ${violations.length ? `
+              <div class="invariants-detail-section">
+                <div class="invariants-detail-section-title">Violations (${violations.length})</div>
+                ${violations.map(v => `
+                  <div class="invariants-violation">
+                    <div class="invariants-violation-file">${esc(v.file)}${v.line ? ":" + v.line : ""}</div>
+                    <div class="invariants-violation-expected"><span class="invariants-violation-label">Expected: </span>${esc(v.expected)}</div>
+                    <div class="invariants-violation-found"><span class="invariants-violation-label">Found: </span>${esc(v.found)}</div>
+                    <div class="invariants-violation-suggestion"><span class="invariants-violation-label">Suggestion: </span>${esc(v.suggestion)}</div>
+                  </div>
+                `).join("")}
+              </div>
+            ` : ""}
+            ${checkedFiles.length ? `
+              <div class="invariants-detail-section">
+                <div class="invariants-detail-section-title">Checked Files (${checkedFiles.length})</div>
+                <div class="invariants-checked-files">${checkedFiles.map(f => esc(f)).join("<br>")}</div>
+              </div>
+            ` : ""}
+            ${surfaceLinks}
+            ${featureLinks}
+            ${result.verificationPrompt ? `
+              <div class="invariants-detail-section">
+                <div class="invariants-detail-section-title">Verification Prompt</div>
+                <div class="invariants-prompt-block">
+                  <button class="invariants-copy-btn" data-copy-invariant="${result.id}" onclick="event.stopPropagation(); copyInvariantPrompt('${result.id}')">Copy</button>${esc(result.verificationPrompt)}</div>
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }
+
       // -- Init --
       function init() {
         ensureEngHealthMetricSelection();
         computeEntitySurfaceMap();
         computeFileTreeColors();
+        updateInvariantsTabVisibility();
         renderStats();
         setupTabs();
         setupSearch();
@@ -3999,6 +4405,7 @@
         if (tab === "codeorg") renderCodemapView();
         if (tab === "featuremap") renderFileTreeContent();
         if (tab === "codehealth") renderCodeHealthTab();
+        if (tab === "invariants") renderInvariantsTab();
         if (
           tab === "surfaces" &&
           !selectedSurfaceId &&
@@ -4021,7 +4428,7 @@
         const list = document.getElementById("sidebar-list");
         list.innerHTML = "";
 
-        if (currentTab === "overview" || currentTab === "codehealth") {
+        if (currentTab === "overview" || currentTab === "codehealth" || currentTab === "invariants") {
           return;
         }
 

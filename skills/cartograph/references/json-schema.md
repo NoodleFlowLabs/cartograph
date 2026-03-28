@@ -16,7 +16,8 @@ This is the contract between the extraction skill and the visualizer. Output mus
   "flows": [ ... ],
   "compartments": [ ... ],
   "fileTree": [ ... ],
-  "codeHealth": { ... }
+  "codeHealth": { ... },
+  "invariants": { ... }
 }
 ```
 
@@ -332,6 +333,129 @@ The dead-code metric uses `metric.id = "dead-code"` and emits product-level and 
   "referencingOperations": [],
   "referencingFeatures": [],
   "prismaQueryCount": 0
+}
+```
+
+## `invariants`
+
+Product-level invariant verification results. Invariants are assertions about the codebase that should always be true — things like "credits are always refunded on failed generations" or "all production routes require authentication." They catch regressions in core product behavior that span multiple files and require understanding product intent.
+
+This key is **optional for backwards compatibility**; when absent, the visualizer hides the Invariants tab entirely. Do **not** auto-initialize `invariants` to a default — treat its absence as "no invariant data."
+
+Invariant definitions live in a separate file (`cartograph-invariants.md`) at the repo root — see `references/invariant-definitions-format.md` for the definition format. This key contains only the **verification results**.
+
+```json
+{
+  "verifiedAt": "2025-01-15T10:30:00Z",
+  "definitionsFile": "cartograph-invariants.md",
+  "summary": {
+    "total": 4,
+    "passing": 3,
+    "failing": 1,
+    "skipped": 0
+  },
+  "results": [
+    {
+      "id": "credits-refunded-on-failure",
+      "name": "Credits refunded on failed generations",
+      "severity": "critical",
+      "status": "pass",
+      "summary": "All 4 generation actions have refund paths on error",
+      "tags": ["money", "credits"],
+      "surfaceIds": ["chat-thread", "creation-studio"],
+      "featureIds": ["image-generation"],
+      "evidence": {
+        "checkedFiles": [
+          "app/chat/[personaSlug]/actions/generate-image.ts",
+          "app/chat/[personaSlug]/actions/generate-video.ts",
+          "app/create/actions/generate.ts",
+          "app/create/actions/remix.ts"
+        ],
+        "violations": []
+      },
+      "verificationPrompt": "Read the file cartograph-invariants.md and verify the invariant 'credits-refunded-on-failure'. Check all server actions in app/chat/*/actions/ and app/create/actions/ that call AI generation APIs. Verify each has error handling that calls a credit refund function. Report pass/fail with evidence."
+    }
+  ]
+}
+```
+
+- `verifiedAt` — ISO 8601 timestamp of when invariants were last verified
+- `definitionsFile` — path to the invariant definitions file (relative to repo root)
+- `summary` — aggregate counts
+  - `total` — total number of invariant definitions found
+  - `passing` — invariants with `status: "pass"`
+  - `failing` — invariants with `status: "fail"`
+  - `skipped` — invariants with `enabled: false`
+- `results[]` — one entry per invariant
+
+### Result fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Matches the `id` from the invariant definition frontmatter |
+| `name` | string | The invariant's heading from the definitions file |
+| `severity` | `"critical"` \| `"high"` \| `"low"` | From definition frontmatter |
+| `status` | `"pass"` \| `"fail"` \| `"skipped"` | Verification result |
+| `summary` | string | One-sentence plain-language summary of the result |
+| `tags` | string[] | From definition frontmatter |
+| `surfaceIds` | string[] | From definition frontmatter (may be empty) |
+| `featureIds` | string[] | From definition frontmatter (may be empty) |
+| `evidence` | object \| null | Null for skipped invariants |
+| `evidence.checkedFiles` | string[] | All files the agent examined during verification |
+| `evidence.violations` | object[] | Empty array for passing invariants |
+| `evidence.violations[].file` | string | File path where the violation was found |
+| `evidence.violations[].line` | number \| null | Line number if applicable |
+| `evidence.violations[].expected` | string | What should have been true |
+| `evidence.violations[].found` | string | What was actually found |
+| `evidence.violations[].suggestion` | string | Concrete recommendation for fixing the violation |
+| `verificationPrompt` | string \| null | Copy-pasteable prompt for external automation. Null for skipped. |
+
+### Example: failing result
+
+```json
+{
+  "id": "thumbnail-aspect-ratios",
+  "name": "Thumbnail aspect ratios match media",
+  "severity": "high",
+  "status": "fail",
+  "summary": "1 of 3 thumbnail generation paths produces incorrect aspect ratios",
+  "tags": ["media", "ui"],
+  "surfaceIds": [],
+  "featureIds": ["media-upload", "thumbnail-generation"],
+  "evidence": {
+    "checkedFiles": [
+      "app/media/components/thumbnail-generator.tsx",
+      "app/upload/actions/process-media.ts",
+      "lib/media/resize.ts"
+    ],
+    "violations": [
+      {
+        "file": "lib/media/resize.ts",
+        "line": 45,
+        "expected": "Thumbnail aspect ratio matches source media dimensions",
+        "found": "Hardcoded 1:1 center crop for all thumbnails regardless of source aspect ratio",
+        "suggestion": "Use source media dimensions to calculate thumbnail crop area"
+      }
+    ]
+  },
+  "verificationPrompt": "Verify the invariant 'thumbnail-aspect-ratios'. Check all thumbnail generation code in app/media/ and lib/media/. For each thumbnail generation path, verify that the output aspect ratio matches the source media's aspect ratio. Report pass/fail with evidence."
+}
+```
+
+### Example: skipped result
+
+```json
+{
+  "id": "some-paused-invariant",
+  "name": "Some paused invariant",
+  "severity": "low",
+  "status": "skipped",
+  "summary": "Invariant is disabled (enabled: false)",
+  "tags": [],
+  "surfaceIds": [],
+  "featureIds": [],
+  "evidence": null,
+  "verificationPrompt": null
 }
 ```
 

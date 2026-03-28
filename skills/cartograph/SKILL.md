@@ -2,7 +2,7 @@
 name: cartograph
 description: >
   Map any TypeScript/JS web app codebase into a structured vocabulary of surfaces,
-  features, entities, relationships, operations, flows, compartments, and tech stack. Surfaces are
+  features, entities, relationships, operations, flows, compartments, invariants, and tech stack. Surfaces are
   entry points (pages/routes); features are standalone capabilities embedded across
   surfaces (e.g., "Prompt Wizard", "Star Credits", "Content Unlock"); compartments are
   logical groupings of related code files that bridge product concepts to the underlying
@@ -11,7 +11,8 @@ description: >
   data flows, examine code organization, or get a high-level overview of what an app does.
   Triggers on: "map this codebase", "what does this app do", "show me the entities",
   "cartograph", "extract the structure", "codebase overview", "understand this repo",
-  "code map", "show me the code structure".
+  "code map", "show me the code structure", "add invariant", "verify invariants",
+  "check invariants".
 ---
 
 # Cartograph
@@ -20,7 +21,70 @@ Extract a structural map of any TypeScript/JS web app: surfaces, features, entit
 
 ## Workflow
 
-The workflow runs in **5 waves plus a parallel health pass (Wave 3.5)**. Within each wave, spawn the listed agents **in parallel**, wait for all of them to finish, then move to the next wave. Each agent should return its results as a JSON array (or arrays) matching the schema in `references/json-schema.md`. Between waves, you are the orchestrator — collect agent outputs and pass them as context to the next wave's agents.
+### Intent Detection
+
+Before starting the wave pipeline, detect the user's intent from their message:
+
+1. **Add Invariant** — If the message contains "add invariant", "new invariant", or a phrase like "add this invariant: '...'" → run the **Add Invariant Flow** below instead of the full scan.
+2. **Standalone Verify** — If the message contains "verify", "check invariants", "run invariants", or similar → run the **Standalone Verify Flow** below instead of the full scan.
+3. **Full Scan** — Otherwise, run the full wave pipeline (which includes invariant verification in Wave 3.5).
+
+---
+
+### Add Invariant Flow
+
+When the user wants to add a new invariant:
+
+1. Extract the user's assertion text (the natural-language claim after "add invariant:" or similar phrasing).
+2. Read the codebase to understand the assertion:
+   - Identify relevant files, functions, and patterns related to the assertion
+   - Determine which surfaces and features are involved (if a previous `cartograph.json` exists, reference its IDs for `surfaceIds` and `featureIds`)
+   - Map out the verification approach
+3. Expand the one-liner into a full invariant definition following the format in `references/invariant-definitions-format.md`:
+   - Write the YAML frontmatter: generate a unique kebab-case `id`, set `severity` based on the nature of the assertion (critical for money/security/data integrity, high for core product logic, low for conventions), add relevant `tags`, and optionally add `surfaceIds`/`featureIds`
+   - Write all body sections: **Assertion**, **Verification steps**, **Pass criteria**, **Known scope**, **Verification prompt**
+4. Write the invariant to `cartograph-invariants.md` at the repo root:
+   - If the file doesn't exist, create it with a `# Cartograph Invariants` heading
+   - Append the new invariant section at the end
+5. Run an initial verification of the new invariant by following the Verification steps you just wrote.
+6. Report the result:
+   - If passing: "Invariant added and verified. Definition saved to `cartograph-invariants.md`."
+   - If failing: "Invariant added but does NOT currently hold — definition saved anyway. Violations: [details]. Fix the code to make it pass, or edit the definition if the assertion needs adjusting."
+
+If the user's assertion is too vague to determine verification steps, ask a clarifying question before writing the definition.
+
+---
+
+### Standalone Verify Flow
+
+When the user wants to verify existing invariants without a full scan:
+
+1. Read `cartograph-invariants.md` from the repo root.
+   - If the file doesn't exist: respond "No invariant definitions found. Add one with: `/cartograph add this invariant: '...'`"
+2. Parse each invariant section: extract frontmatter fields and body sections (see `references/invariant-definitions-format.md` for the format).
+3. For each enabled invariant, follow the **Verification steps** section, read the relevant files, evaluate the **Pass criteria**, and produce a result.
+4. For disabled invariants (`enabled: false`), emit a `"skipped"` result.
+5. Print a pass/fail summary to the console:
+   ```
+   Invariant Results (N checked)
+   ──────────────────────────────────
+   ✓ CRITICAL  Invariant name
+     Summary of passing result
+
+   ✗ HIGH  Invariant name
+     Violation in file:line
+     Brief description of violation
+
+   N of M invariants passing.
+   ```
+6. If `cartograph.json` exists at the repo root, update **only** the `invariants` key (leave all other data untouched). Write the `invariants` object following the schema in `references/json-schema.md`.
+7. If `cartograph.json` doesn't exist, create a minimal JSON with only `meta` and `invariants` keys.
+
+---
+
+### Full Scan Workflow
+
+The full scan workflow runs in **5 waves plus a parallel health pass (Wave 3.5)**. Within each wave, spawn the listed agents **in parallel**, wait for all of them to finish, then move to the next wave. Each agent should return its results as a JSON array (or arrays) matching the schema in `references/json-schema.md`. Between waves, you are the orchestrator — collect agent outputs and pass them as context to the next wave's agents.
 
 ---
 
@@ -214,9 +278,9 @@ Return: a JSON array of `{file, featureWeights: [{featureId, weight}]}` entries 
 
 ---
 
-### Wave 3.5: Code Health (parallel)
+### Wave 3.5: Code Health + Invariants (parallel)
 
-Spawn **three agents in parallel**, wait for all of them to finish. Pass each agent the discover bundle plus the relevant outputs from Waves 1–3.
+Spawn **up to four agents in parallel**, wait for all of them to finish. Pass each agent the discover bundle plus the relevant outputs from Waves 1–3. Agent 11 (Invariant Verification) only runs if `cartograph-invariants.md` exists at the repo root; otherwise it is skipped.
 
 #### Agent 8 — Co-location Analysis
 
@@ -312,6 +376,26 @@ Return: one metric object with:
 - `name`, `description`, `score`, `thresholds`, `summary`
 - `findings[]` in the dead-code finding shape from `references/json-schema.md`
 
+#### Agent 11 — Invariant Verification
+
+Give this agent the discover bundle and ask it to verify all invariants.
+
+The agent should:
+1. Read `cartograph-invariants.md` from the repo root
+2. If the file doesn't exist, return `null` (no invariants to verify — skip silently)
+3. Parse each invariant section: extract frontmatter fields and body sections (see `references/invariant-definitions-format.md` for the format)
+4. Skip invariants with `enabled: false` — emit a `"skipped"` result for each
+5. For each enabled invariant:
+   - Follow the **Verification steps** section as a guide
+   - Read the files listed in **Known scope** and any additional files the steps reference
+   - Evaluate whether the **Pass criteria** hold
+   - If passing: record the checked files and an empty violations array
+   - If failing: record specific violations with file paths, line numbers, what was expected, what was found, and a suggestion
+6. Compute the summary counts (total, passing, failing, skipped)
+7. Set `verifiedAt` to the current ISO 8601 timestamp and `definitionsFile` to `"cartograph-invariants.md"`
+
+Return: the `invariants` object matching the schema in `references/json-schema.md`, or `null` if no definitions file exists.
+
 ---
 
 ### Wave 4: Compartment Dependencies
@@ -346,9 +430,10 @@ Run this yourself (no agent needed). Merge all agent outputs into the final JSON
 5. Add a top-level `codeHealth` object:
    - `codeHealth.analyzedAt = ISO timestamp`
    - `codeHealth.metrics = [coLocationMetric, drynessMetric, deadCodeMetric]`
-6. Assemble the final JSON following the schema in `references/json-schema.md`
-7. Write `cartograph.json` to the repo root
-8. Tell the user: "Open the visualizer (`assets/visualizer.html` in this skill's directory) in your browser and load `cartograph.json` via the file picker."
+6. If Agent 11 returned a non-null result, include `"invariants": <agent-11-result>` in the final JSON. If Agent 11 returned `null` (no definitions file), omit the `invariants` key entirely.
+7. Assemble the final JSON following the schema in `references/json-schema.md`
+8. Write `cartograph.json` to the repo root
+9. Tell the user: "Open the visualizer (`assets/visualizer.html` in this skill's directory) in your browser and load `cartograph.json` via the file picker." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
 
 ## Important
 
