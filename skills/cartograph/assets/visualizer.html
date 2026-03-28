@@ -2853,6 +2853,31 @@
           />
         </div>
 
+        <!-- Invariants quick-reference -->
+        <div class="welcome-divider"></div>
+        <div class="welcome-section">
+          <div class="welcome-section-title">Invariants</div>
+          <div class="welcome-steps">
+            <div>
+              <strong style="color: var(--text)">Add an invariant</strong><br />
+              Tell the skill what should always be true, in plain language:<br />
+              <code>/cartograph add this invariant: "credits are always refunded on failed generations"</code><br />
+              <span style="color: var(--text-dim); font-size: 12px">
+                The agent expands your one-liner into a full definition with verification steps, pass criteria, known scope, and a verification prompt &mdash; then runs an initial check. Definitions are saved to <code>cartograph-invariants.md</code> at your repo root.
+              </span>
+            </div>
+            <div>
+              <strong style="color: var(--text)">Verify invariants</strong><br />
+              Run just the invariant check without a full scan:<br />
+              <code>/cartograph verify invariants</code><br />
+              <span style="color: var(--text-dim); font-size: 12px">
+                Reads <code>cartograph-invariants.md</code>, checks each enabled invariant against your codebase, and prints a pass/fail summary. Results are written to the <code>invariants</code> key in <code>cartograph.json</code> so you can view them in this visualizer.
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="welcome-divider"></div>
+
         <div
           class="welcome-landing-link"
           style="

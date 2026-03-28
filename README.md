@@ -48,6 +48,57 @@ Define the rules your product should never violate:
 
 When you or your agent make changes, verify invariants still hold. Catch regressions before they ship.
 
+#### Adding an Invariant
+
+Tell the cartograph skill what should always be true, in plain language:
+
+```bash
+/cartograph add this invariant: "credits are always refunded on failed generations"
+```
+
+The agent will:
+1. Analyze your codebase to understand the assertion
+2. Expand it into a full definition with verification steps, pass criteria, known scope, and a copy-pasteable verification prompt
+3. Append it to `cartograph-invariants.md` at your repo root
+4. Run an initial verification and report whether it currently holds
+
+Invariants are stored in `cartograph-invariants.md` using this format:
+
+```markdown
+## Invariant Display Name
+
+---
+id: unique-kebab-case-id
+severity: critical
+enabled: true
+tags: [money, credits]
+---
+
+**Assertion:** One-sentence claim that must always be true.
+
+**Verification steps:**
+1. Concrete step referencing specific files/patterns...
+
+**Pass criteria:** What "passing" looks like.
+
+**Known scope:** Relevant file paths and directories.
+
+**Verification prompt:**
+> Self-contained prompt for re-verification by any agent...
+```
+
+Severity levels: `critical` (money, security, data integrity), `high` (core product logic), `low` (conventions). Set `enabled: false` to pause an invariant. Delete the `##` section to remove it permanently.
+
+#### Verifying Invariants
+
+Run just the invariant verification step without a full scan:
+
+```bash
+/cartograph verify invariants
+```
+
+This reads `cartograph-invariants.md`, checks each enabled invariant against your codebase, and prints a pass/fail summary. Results are also written to the `invariants` key in `cartograph.json` (all other data is preserved), so you can view them in the visualizer.
+
 ### Copy-Paste Prompts
 
 Every finding comes with a structured prompt you can paste directly into your agent. Fix code health issues, implement features that integrate correctly with existing code, or consolidate duplicates — all with full codebase context already baked in.
