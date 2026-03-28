@@ -65,6 +65,7 @@ When the user wants to verify existing invariants without a full scan:
 3. For each enabled invariant, follow the **Verification steps** section, read the relevant files, evaluate the **Pass criteria**, and produce a result.
 4. For disabled invariants (`enabled: false`), emit a `"skipped"` result.
 5. Print a pass/fail summary to the console:
+
    ```
    Invariant Results (N checked)
    ──────────────────────────────────
@@ -77,6 +78,7 @@ When the user wants to verify existing invariants without a full scan:
 
    N of M invariants passing.
    ```
+
 6. If `cartograph.json` exists at the repo root, update **only** the `invariants` key (leave all other data untouched). Write the `invariants` object following the schema in `references/json-schema.md`.
 7. If `cartograph.json` doesn't exist, create a minimal JSON with only `meta` and `invariants` keys.
 
@@ -113,6 +115,7 @@ Run this yourself (no agent needed — it's fast and every later agent needs the
    - Import patterns in code: `@clerk/*`, `@auth/*`, `@stripe/*`, `openai`, `@anthropic-ai/*`, etc.
 
    Return the tech stack as a JSON array conforming to the `techStack[]` schema in `references/json-schema.md`.
+
 5. Collect the full file inventory (all non-generated files). This is the "discover bundle" — pass it to every agent in later waves along with the detected tech stack.
 
 ---
@@ -128,6 +131,7 @@ Give this agent the discover bundle and ask it to identify all surfaces.
 Surfaces are the top-level organizational axis — self-contained entry points or standalone pieces of functionality. Each app is fundamentally a collection of surfaces.
 
 The agent should:
+
 1. Walk the route tree (`app/**/page.tsx`) and identify each distinct user-facing experience
 2. Group related routes into surfaces (e.g., `/create` + `/create/[id]/edit` = one "Creation Studio" surface)
 3. Look for admin-only areas, standalone tools, dashboards, and onboarding flows
@@ -142,6 +146,7 @@ The agent should:
 Give this agent the discover bundle (specifically the schema/type file paths) and ask it to extract all entities and relationships.
 
 **Entities** — read schema/type definitions and extract domain objects:
+
 1. **DB models** (high confidence) — Prisma models, TypeORM entities, Mongoose schemas
 2. **TypeScript types/interfaces** (medium confidence) — types used as API payloads, form data, state
 3. **Enums** (high confidence) — enum definitions representing domain concepts
@@ -150,6 +155,7 @@ Give this agent the discover bundle (specifically the schema/type file paths) an
 For each entity: id, name, kind, description, source location, key fields (3-8 most important), confidence.
 
 **Relationships** — map connections between entities:
+
 1. Foreign keys and references in schema → `has-many`, `belongs-to`, `has-one`
 2. Nested includes/joins → confirms relationships
 3. Type compositions → `derives-from`
@@ -170,6 +176,7 @@ Give this agent the discover bundle, surfaces, and entities. Ask it to extract a
 Features are standalone capabilities embedded within surfaces. They're not pages — they're the reusable functional building blocks that surfaces compose. A surface is "where you go"; a feature is "what you can do there."
 
 Look for these patterns:
+
 1. **Tools** — interactive multi-step experiences (wizards, editors, sandboxes). Look for modal components, multi-step forms, stateful composition flows
 2. **Interactions** — single-action engagement patterns (like, save, follow, share). Look for optimistic-update hooks, toggle actions, engagement server actions
 3. **Transactions** — money/credit flows (purchase, tip, unlock). Look for payment integrations, credit deduction/grant logic, checkout flows
@@ -178,6 +185,7 @@ Look for these patterns:
 6. **Workflows** — multi-step admin/system processes (content review, scan pipelines, approval queues). Look for status machines, review UIs, batch processing
 
 For each feature:
+
 - **Name and description**: what this feature does as a standalone capability
 - **Kind**: tool, interaction, transaction, gate, infrastructure, or workflow
 - **surfaceIds**: which surfaces embed this feature
@@ -195,6 +203,7 @@ Return: a JSON array of features (without `compartmentIds` yet — that gets pop
 Give this agent the discover bundle, entities, and the list of route/action/API files from discover. Ask it to identify all operations.
 
 For each entry point (route handler, server action, API endpoint):
+
 1. Which entity it targets
 2. Operation type: `create`, `read`, `update`, `delete`, or `domain`
 3. Descriptive name (e.g., "Publish Post", "Generate Preview")
@@ -228,6 +237,7 @@ Give this agent the discover bundle (especially the full file inventory), plus s
 Compartments are logical groupings of related files that form cohesive units of functionality. They bridge the product-side view (surfaces, features) with the underlying code structure, so a developer can navigate from "what does this feature do?" to "where does that code live?"
 
 The agent should:
+
 1. Scan the full codebase file tree, using the already-extracted surfaces, features, entities, and operations as context
 2. Group files into compartments using AI judgment based on multiple signals:
    - **Folder structure** — files in the same directory or subtree often belong together
@@ -248,6 +258,7 @@ The agent should:
    - **surfaceIds**: which surfaces this compartment serves
 
 **Compartment guidelines:**
+
 - Don't create compartments with only 1 file unless it's a genuinely standalone module. Merge small groupings into their parent.
 - Keep top-level compartments to 8–15 for a typical web app. More sub-compartments are fine.
 - Prefer meaningful groupings over 1:1 folder mapping. If a folder contains unrelated files, split them. If related files span folders, group them.
@@ -256,11 +267,12 @@ Return: a JSON array of compartments (without `dependsOn` yet — that gets popu
 
 #### Agent 7 — File Tree Feature Weights
 
-*(Experimental — fully isolated from other data. See `specs/spec-file-tree.md` for the full spec.)*
+_(Experimental — fully isolated from other data. See `specs/spec-file-tree.md` for the full spec.)_
 
 Give this agent the discover bundle (full file inventory) and the features array from Wave 2. Ask it to estimate, for every non-generated file, what percentage of the file's purpose is attributable to each feature.
 
 The agent should:
+
 1. Take the list of all non-generated files from the discover bundle.
 2. For each file, read the file (or a representative sample for very large files) and estimate what proportion of the file serves each feature.
 3. Files that don't belong to any product feature get `"__infrastructure__"` as their sole feature weight.
@@ -268,6 +280,7 @@ The agent should:
 5. All weights for a file must sum to 1.0.
 
 **Estimation guidance:**
+
 - Look at imports, function names, component names, and the overall purpose of the file.
 - A file 100% dedicated to one feature → `[{featureId: "that-feature", weight: 1.0}]`.
 - A shared utility used by multiple features → split proportionally.
@@ -287,6 +300,7 @@ Spawn **up to four agents in parallel**, wait for all of them to finish. Pass ea
 Give this agent the discover bundle (especially the full file inventory), plus surfaces, features, compartments, and the project's co-location rules from `AGENTS.md`, `CLAUDE.md`, or equivalent repo instructions.
 
 The agent should:
+
 1. Read project instructions and extract explicit co-location conventions. If none are found, fall back to these universal heuristics:
    - Files used by a single surface should live inside that surface's directory
    - Files shared by multiple surfaces but representing one capability belong in `features/<capability>/`
@@ -297,12 +311,19 @@ The agent should:
    - Determine which surfaces/features actually consume it
    - Compare its current location to where it should live per the rules
    - Assign a binary `pass` / `fail` verdict
-3. For each failing file, emit a concrete recommendation:
+3. For each failing file, emit a finding with a concrete recommendation:
    - `"move"` when the file should be co-located inside a surface or feature directory
    - `"promote"` when the file should move up into `features/` because it serves multiple surfaces
 4. Compute the score as `(passing files / total evaluated files) * 100`
 
+**Findings and summary requirements — these are strict:**
+
+- The `findings[]` array MUST contain one entry for every file that received a `"fail"` verdict. If the score is below 100%, there MUST be findings explaining exactly which files caused the deduction. An empty findings array with a sub-100% score is a bug.
+- Each finding MUST include `file`, `verdict`, `reason`, `consumers[]`, and `recommendation` (with `action` and `target`) — see `references/json-schema.md` for the exact shape.
+- The `summary` MUST be quantified — e.g., "8 of 103 evaluated files are misplaced" — not vague prose like "Most code follows co-location rules." Include the exact counts.
+
 Return: one metric object with:
+
 - `id: "co-location"`
 - `name`, `description`, `score`, `thresholds`, `summary`
 - `findings[]` in the co-location finding shape from `references/json-schema.md`
@@ -312,6 +333,7 @@ Return: one metric object with:
 Give this agent the discover bundle, plus surfaces, features, entities, operations, and compartments.
 
 The agent should:
+
 1. Use features and compartments as the starting map of the codebase's functional areas
 2. Look for candidate duplication before reading file contents:
    - Features with the same `kind` and overlapping `entityIds` across different surfaces
@@ -329,7 +351,14 @@ The agent should:
    - `K = 200 / totalNonInfrastructureFiles`
    - `score = max(0, 100 - (findingCount * K))`
 
+**Findings and summary requirements — these are strict:**
+
+- The `findings[]` array MUST contain one entry for every confirmed duplication. If the score is below 100%, there MUST be findings explaining exactly which duplications caused the deduction. An empty findings array with a sub-100% score is a bug.
+- Each finding MUST include `id`, `title`, `severity`, `implementations[]`, `sharedLogic[]`, and `recommendation` — see `references/json-schema.md` for the exact shape.
+- The `summary` MUST be quantified — e.g., "3 duplication clusters found across 7 files" — not vague prose. Include the exact finding count and affected file count.
+
 Return: one metric object with:
+
 - `id: "dryness"`
 - `name`, `description`, `score`, `thresholds`, `summary`
 - `scalingFactor`
@@ -340,6 +369,7 @@ Return: one metric object with:
 Give this agent the discover bundle, plus surfaces, features, entities, operations, and compartments.
 
 The agent should:
+
 1. Build an import map for every non-generated file in the discover bundle:
    - Record which files import each file
    - Resolve relative imports and `@/` path aliases
@@ -371,7 +401,14 @@ The agent should:
    - `score = ((totalEvaluated - deadItems) / totalEvaluated) * 100`
    - Exclude test-only files from both numerator and denominator
 
+**Findings and summary requirements — these are strict:**
+
+- The `findings[]` array MUST contain one entry for every dead item (dead file, orphaned surface, orphaned feature, dead entity). Test-only files should also appear as informational findings. If the score is below 100%, there MUST be findings explaining exactly which items caused the deduction. An empty findings array with a sub-100% score is a bug.
+- Each finding MUST include `id`, `kind`, `severity`, `target`, `reason`, `evidence`, and `recommendation` — see `references/json-schema.md` for the exact shape and the kind-specific evidence formats.
+- The `summary` MUST be quantified and broken down by kind — e.g., "12 dead items found: 8 dead files, 1 orphaned surface, 1 orphaned feature, 2 dead entities. 3 test-only files flagged." — not vague prose like "No strong dead-code cluster surfaced." Include the exact counts per kind, plus the total evaluated.
+
 Return: one metric object with:
+
 - `id: "dead-code"`
 - `name`, `description`, `score`, `thresholds`, `summary`
 - `findings[]` in the dead-code finding shape from `references/json-schema.md`
@@ -381,6 +418,7 @@ Return: one metric object with:
 Give this agent the discover bundle and ask it to verify all invariants.
 
 The agent should:
+
 1. Read `cartograph-invariants.md` from the repo root
 2. If the file doesn't exist, return `null` (no invariants to verify — skip silently)
 3. Parse each invariant section: extract frontmatter fields and body sections (see `references/invariant-definitions-format.md` for the format)
@@ -404,6 +442,7 @@ Return: the `invariants` object matching the schema in `references/json-schema.m
 Spawn **one agent**. Pass it the compartments array from Wave 3, plus surfaces and features from earlier waves.
 
 The agent should:
+
 1. Walk the imports of every file in every compartment
 2. Map each imported file to the compartment(s) it belongs to
 3. Record these as `dependsOn` edges on each compartment (only inter-compartment, not self-references)
