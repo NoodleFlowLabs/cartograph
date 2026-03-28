@@ -1,88 +1,90 @@
 # Cartograph
 
-**Remember holding your whole codebase in your head?**
+## The Problem
 
-Vibe coding made building fast — but your codebase grew faster than your understanding. Cartograph maps it all out so you can hold the whole picture again.
+Vibe coding lets you ship fast. But the codebase grows faster than your understanding.
 
-An open-source agent skill that runs locally in [Claude Code](https://claude.ai/code) or [Codex](https://openai.com/codex). It analyzes any TypeScript/JS web app across seven dimensions, produces a `cartograph.json` with all findings, and generates an interactive `visualizer.html` to explore everything in your browser.
+At some point you notice: your agent doesn't understand your requests as clearly anymore. It makes more mistakes. One change silently breaks three others. You've lost track of what's in the codebase — which pages exist, how features connect, what the data model looks like. The whole thing became a black box, and you're flying blind.
 
-Your code never leaves your machine.
+## How Cartograph Solves This
 
-[Learn More](https://noodleflow.com/cartograph) · [Skills Marketplace](https://skills.sh/ilamanov/skills/cartograph) · [Discord](https://discord.gg/ccTgESTa) · [Issues](https://github.com/ilamanov/cartograph/issues)
+Cartograph scans your entire codebase and maps it out — every page, feature, user flow, data model, and file. It gives you a bird's-eye view of your product, scores your code health, defines invariants that should never break, and generates copy-pasteable prompts so your agent has full context without you re-explaining every time.
+
+It's an open-source agent skill. Runs locally. Your code never leaves your machine.
+
+[Learn More](https://noodleflow.com/cartograph) · [Skills Marketplace](https://skills.sh/NoodleFlowLabs/cartograph/cartograph) · [Discord](https://discord.gg/ccTgESTa) · [Issues](https://github.com/NoodleFlowLabs/cartograph/issues)
 
 ---
 
-## Quick Start
+## Features
 
-### 1. Install the skill
+### Bird's-Eye View of Your Product
+
+See everything that exists in your codebase at a glance:
+
+- **Surfaces** — every page and route in your app
+- **Features** — standalone capabilities embedded across surfaces
+- **Flows** — user journeys traced step-by-step through code
+- **File Tree Map** — what each file is actually for
+- **Data Model** — entities, relationships, and operations
+- **Code Organization** — logical groupings that bridge product concepts to code
+
+### Code Health Scores
+
+Cartograph scores your codebase across multiple dimensions and highlights what needs fixing:
+
+- **Co-location** — are related files grouped together or scattered?
+- **DRYness** — duplicate patterns detected with prompts to consolidate
+- **Dead code** — unused files, dead features, unreachable paths
+- **Framework best practices** — Next.js, React, and more
+
+### Invariants
+
+Define the rules your product should never violate:
+
+- "Auth must be required on all dashboard routes"
+- "Cart cannot be empty at checkout"
+- "Free trial users can't access Pro features"
+
+When you or your agent make changes, verify invariants still hold. Catch regressions before they ship.
+
+### Copy-Paste Prompts
+
+Every finding comes with a structured prompt you can paste directly into your agent. Fix code health issues, implement features that integrate correctly with existing code, or consolidate duplicates — all with full codebase context already baked in.
+
+No more re-explaining your product's architecture every time you prompt. Better context in, better code out.
+
+---
+
+## Getting Started
+
+### 1. Install
 
 ```bash
-npx skills add ilamanov/cartograph --skill cartograph
+npx skills add NoodleFlowLabs/cartograph --skill cartograph
 ```
 
-### 2. Run it in Claude Code or Codex
+### 2. Run
 
 ```bash
 /cartograph
 ```
 
-### 3. Explore the output
+Works in Claude Code, Codex, or any agent that supports skills. This scans your entire codebase and outputs `cartograph.json` with all findings into your project root.
 
-Two files land in your project root:
+### 3. Explore
 
-- **`cartograph.json`** — structured map of your entire codebase
-- **`visualizer.html`** — interactive local visualizer
+Open the bundled visualizer (`assets/visualizer.html`) in your browser, or use the hosted copy:
 
-Open `visualizer.html` in your browser, drag-drop the JSON file, and explore.
+```bash
+open https://cartograph.noodleflow.ai/visualizer
+```
 
----
+Drag-drop `cartograph.json` into the visualizer and explore every dimension.
 
-## What Gets Mapped
+### 4. Iterate
 
-Cartograph extracts seven dimensions from your codebase, organized into two groups:
-
-### Your Product
-
-| Dimension    | What it maps                                     |
-| ------------ | ------------------------------------------------ |
-| **Surfaces** | Pages, routes — the navigable shape of your app  |
-| **Features** | Standalone capabilities embedded across surfaces |
-| **Flows**    | User journeys traced step-by-step through code   |
-
-### Your Code
-
-| Dimension             | What it maps                                                           |
-| --------------------- | ---------------------------------------------------------------------- |
-| **File Tree Map**     | Per-file feature attribution — what each file is really for            |
-| **Data Model**        | Entities, relationships, and operations — your domain layer mapped out |
-| **Code Organization** | Logical groupings that bridge product concepts to code                 |
-| **Code Health**       | Co-location, DRYness, dead code — scores and prompts to fix            |
-
----
-
-## Copy-Paste Prompts
-
-Every dimension comes with copy-pasteable prompts. Paste them into your AI coding agent to fix issues or build features — all the context is already there, no need to explain your codebase from scratch.
-
----
-
-## How It Works
-
-A multi-wave agent workflow runs locally on your machine:
-
-1. **Run** `/cartograph` in Claude Code or `npx cartograph`
-2. **Analyze** — parallel agents extract surfaces, features, entities, flows, code health, and more
-3. **Output** — `cartograph.json` + `visualizer.html` land in your project root
-4. **Explore** — open the visualizer, drag-drop the JSON, browse every dimension
-5. **Act** — copy prompts into your AI coding agent to fix or build with full context
-
----
-
-## Who It's For
-
-**Engineers** — Code health scoring, dead code analysis, framework best practices. Highlights problems and gives you prompts to fix them. Make your codebase second nature again.
-
-**Builders & Vibe Coders** — See every page, feature, and flow without reading code. Copy-paste prompts to implement features or fix issues — no engineering help needed. Stop flying blind.
+Use the generated prompts to fix issues and improve health. Run `/cartograph` again. Repeat until your codebase is healthier, better structured, and your agent performs like it should.
 
 ---
 
@@ -91,14 +93,15 @@ A multi-wave agent workflow runs locally on your machine:
 - Runs entirely on your machine
 - No cloud, no telemetry, no account required
 - Your code never leaves your environment
+- Zero config
 
 ---
 
 ## Community
 
-- [Skills Marketplace](https://skills.sh/ilamanov/skills/cartograph) — install page
+- [Skills Marketplace](https://skills.sh/NoodleFlowLabs/cartograph/cartograph) — install page
 - [Discord](https://discord.gg/ccTgESTa) — questions, feedback, show what you mapped
-- [Issues](https://github.com/ilamanov/cartograph/issues) — bug reports, feature requests
+- [Issues](https://github.com/NoodleFlowLabs/cartograph/issues) — bug reports, feature requests
 - [Landing Page](https://noodleflow.com/cartograph) — learn more
 
 ---
