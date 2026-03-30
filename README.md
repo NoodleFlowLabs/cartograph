@@ -1,7 +1,5 @@
 # Cartograph
 
-## The Problem
-
 Vibe coding lets you ship fast. But the codebase grows faster than your understanding.
 
 At some point you notice: your agent doesn't understand your requests as clearly anymore. It makes more mistakes. One change silently breaks three others. You've lost track of what's in the codebase — which pages exist, how features connect, what the data model looks like. The whole thing became a black box, and you're flying blind.
