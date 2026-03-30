@@ -57,6 +57,7 @@ Tell the cartograph skill what should always be true, in plain language:
 ```
 
 The agent will:
+
 1. Analyze your codebase to understand the assertion
 2. Expand it into a full definition with verification steps, pass criteria, known scope, and a copy-pasteable verification prompt
 3. Append it to `cartograph-invariants.md` at your repo root
@@ -68,15 +69,18 @@ Invariants are stored in `cartograph-invariants.md` using this format:
 ## Invariant Display Name
 
 ---
+
 id: unique-kebab-case-id
 severity: critical
 enabled: true
 tags: [money, credits]
+
 ---
 
 **Assertion:** One-sentence claim that must always be true.
 
 **Verification steps:**
+
 1. Concrete step referencing specific files/patterns...
 
 **Pass criteria:** What "passing" looks like.
@@ -84,6 +88,7 @@ tags: [money, credits]
 **Known scope:** Relevant file paths and directories.
 
 **Verification prompt:**
+
 > Self-contained prompt for re-verification by any agent...
 ```
 
@@ -128,7 +133,7 @@ Works in Claude Code, Codex, or any agent that supports skills. This scans your 
 Open the bundled visualizer (`assets/visualizer.html`) in your browser, or use the hosted copy:
 
 ```bash
-open https://cartograph.noodleflow.ai/visualizer
+open https://tools.cartograph.sh/visualizer
 ```
 
 Drag-drop `cartograph.json` into the visualizer and explore every dimension.

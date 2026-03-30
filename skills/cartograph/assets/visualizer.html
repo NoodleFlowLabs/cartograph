@@ -2861,17 +2861,29 @@
             <div>
               <strong style="color: var(--text)">Add an invariant</strong><br />
               Tell the skill what should always be true, in plain language:<br />
-              <code>/cartograph add this invariant: "credits are always refunded on failed generations"</code><br />
+              <code
+                >/cartograph add this invariant: "credits are always refunded on
+                failed generations"</code
+              ><br />
               <span style="color: var(--text-dim); font-size: 12px">
-                The agent expands your one-liner into a full definition with verification steps, pass criteria, known scope, and a verification prompt &mdash; then runs an initial check. Definitions are saved to <code>cartograph-invariants.md</code> at your repo root.
+                The agent expands your one-liner into a full definition with
+                verification steps, pass criteria, known scope, and a
+                verification prompt &mdash; then runs an initial check.
+                Definitions are saved to
+                <code>cartograph-invariants.md</code> at your repo root.
               </span>
             </div>
             <div>
-              <strong style="color: var(--text)">Verify invariants</strong><br />
+              <strong style="color: var(--text)">Verify invariants</strong
+              ><br />
               Run just the invariant check without a full scan:<br />
               <code>/cartograph verify invariants</code><br />
               <span style="color: var(--text-dim); font-size: 12px">
-                Reads <code>cartograph-invariants.md</code>, checks each enabled invariant against your codebase, and prints a pass/fail summary. Results are written to the <code>invariants</code> key in <code>cartograph.json</code> so you can view them in this visualizer.
+                Reads <code>cartograph-invariants.md</code>, checks each enabled
+                invariant against your codebase, and prints a pass/fail summary.
+                Results are written to the <code>invariants</code> key in
+                <code>cartograph.json</code> so you can view them in this
+                visualizer.
               </span>
             </div>
           </div>
@@ -2889,7 +2901,7 @@
         >
           Open this file locally, or use the hosted version:<br />
           <code style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem"
-            >open https://cartograph.noodleflow.ai/visualizer</code
+            >open https://tools.cartograph.sh/visualizer</code
           >
         </div>
 
