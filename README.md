@@ -10,7 +10,7 @@ Cartograph scans your entire codebase and maps it out — every page, feature, u
 
 It's an open-source agent skill. Runs locally. Your code never leaves your machine.
 
-[Learn More](https://noodleflow.ai/cartograph) · [Skills Marketplace](https://skills.sh/NoodleFlowLabs/cartograph/cartograph) · [Discord](https://discord.gg/ccTgESTa) · [Issues](https://github.com/NoodleFlowLabs/cartograph/issues)
+[Learn More](https://cartograph.sh) · [Skills Marketplace](https://skills.sh/NoodleFlowLabs/cartograph/cartograph) · [Discord](https://discord.gg/ccTgESTa) · [Issues](https://github.com/NoodleFlowLabs/cartograph/issues)
 
 ---
 
@@ -156,7 +156,7 @@ Use the generated prompts to fix issues and improve health. Run `/cartograph` ag
 - [Discord](https://discord.gg/ccTgESTa) — questions, feedback, show what you mapped
 - [Issues](https://github.com/NoodleFlowLabs/cartograph/issues) — bug reports, feature requests
 - [Skills Marketplace](https://skills.sh/NoodleFlowLabs/cartograph/cartograph) — install page
-- [Landing Page](https://noodleflow.ai/cartograph) — learn more
+- [Landing Page](https://cartograph.sh) — learn more
 
 ---
 
