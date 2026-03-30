@@ -153,9 +153,9 @@ Use the generated prompts to fix issues and improve health. Run `/cartograph` ag
 
 ## Community
 
-- [Skills Marketplace](https://skills.sh/NoodleFlowLabs/cartograph/cartograph) — install page
 - [Discord](https://discord.gg/ccTgESTa) — questions, feedback, show what you mapped
 - [Issues](https://github.com/NoodleFlowLabs/cartograph/issues) — bug reports, feature requests
+- [Skills Marketplace](https://skills.sh/NoodleFlowLabs/cartograph/cartograph) — install page
 - [Landing Page](https://noodleflow.ai/cartograph) — learn more
 
 ---
