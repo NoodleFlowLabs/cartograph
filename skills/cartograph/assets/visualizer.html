@@ -2251,10 +2251,12 @@
         pointer-events: none;
       }
       .welcome-shell {
-        width: min(680px, 100%);
+        width: min(950px, 100%);
+        min-height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
+        justify-content: space-between;
         text-align: center;
         gap: 28px;
         position: relative;
@@ -2613,6 +2615,313 @@
         display: none;
       }
 
+      /* -- Dashboard Preview -- */
+      .preview-dashboard {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      .preview-tab-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+        overflow-x: auto;
+      }
+      .preview-pill {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.03em;
+        padding: 4px 10px;
+        border-radius: 3px;
+        color: var(--text-dim);
+        background: rgba(255, 255, 255, 0.03);
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+      }
+      .preview-pill:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text-muted);
+      }
+      .preview-pill.active {
+        background: var(--accent-dim);
+        color: var(--accent);
+      }
+      .preview-group-label {
+        font-family: var(--mono);
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        padding: 4px 6px;
+        white-space: nowrap;
+      }
+      .preview-group-label.pm {
+        color: var(--pm-accent);
+      }
+      .preview-group-label.eng {
+        color: var(--eng-accent);
+      }
+      .preview-group-sep {
+        width: 1px;
+        height: 16px;
+        background: var(--border);
+        margin: 0 4px;
+      }
+      .preview-mock-banner {
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--accent);
+        background: var(--accent-dim);
+        text-align: center;
+        padding: 6px 12px;
+        border-bottom: 1px solid rgba(200, 167, 80, 0.2);
+      }
+      .preview-content {
+        padding: 32px 20px;
+        background: var(--surface);
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .preview-pane {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        width: 100%;
+      }
+      .preview-pane.active {
+        display: flex;
+      }
+      .pv-stats {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .pv-stat {
+        text-align: center;
+        padding: 14px 20px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--surface-2);
+      }
+      .pv-stat-num {
+        font-family: var(--mono);
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .pv-stat-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-top: 4px;
+      }
+      .pv-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        width: 100%;
+        max-width: 260px;
+      }
+      .pv-row {
+        padding: 10px 14px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        font-size: 14px;
+        color: var(--text);
+      }
+      .pv-row:first-child {
+        border-radius: 4px 4px 0 0;
+      }
+      .pv-row:last-child {
+        border-radius: 0 0 4px 4px;
+      }
+      .pv-flow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .pv-step {
+        padding: 8px 14px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--surface-2);
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--text);
+      }
+      .pv-arrow {
+        color: var(--text-dim);
+      }
+      .pv-checks {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        width: 100%;
+        max-width: 280px;
+      }
+      .pv-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      .pv-check.pass {
+        background: var(--green-dim);
+        color: var(--green);
+      }
+      .pv-check.fail {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+      .pv-pills {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .pv-pill {
+        padding: 8px 14px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--surface-2);
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--text);
+      }
+      .pv-bars {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+        max-width: 300px;
+      }
+      .pv-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .pv-bar-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-muted);
+        width: 60px;
+        text-align: right;
+        flex-shrink: 0;
+      }
+      .pv-bar-track {
+        flex: 1;
+        height: 18px;
+        background: var(--surface-2);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .pv-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+      }
+      .pv-graph {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .pv-node {
+        padding: 8px 16px;
+        border: 2px solid;
+        border-radius: 20px;
+        font-family: var(--mono);
+        font-size: 13px;
+        background: var(--surface-2);
+      }
+      .pv-edge {
+        width: 20px;
+        height: 2px;
+        background: var(--text-dim);
+        flex-shrink: 0;
+      }
+      .pv-modules {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .pv-module {
+        border: 1px solid;
+        border-radius: 4px;
+        padding: 10px;
+        min-width: 120px;
+      }
+      .pv-module-name {
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 6px;
+      }
+      .pv-module-boxes {
+        display: flex;
+        gap: 4px;
+      }
+      .pv-module-box {
+        padding: 4px 8px;
+        border-radius: 2px;
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+      .pv-health-bar {
+        width: 100%;
+        max-width: 300px;
+        height: 24px;
+        background: var(--surface-2);
+        border-radius: 4px;
+        overflow: hidden;
+        display: flex;
+      }
+      .pv-health-seg {
+        height: 100%;
+      }
+      .pv-health-legend {
+        display: flex;
+        gap: 16px;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .preview-cta {
+        width: 100%;
+        text-align: center;
+        font-size: 15px;
+        color: var(--text-muted);
+        line-height: 1.6;
+      }
+      .preview-cta code {
+        font-family: var(--mono);
+        color: var(--accent);
+        background: rgba(200, 167, 80, 0.08);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 14px;
+      }
+
       /* -- Scrollbar -- */
       ::-webkit-scrollbar {
         width: 5px;
@@ -2819,100 +3128,218 @@
           <span class="welcome-logo-text">Cartograph</span>
         </div>
 
-        <div class="welcome-subtitle">
-          Map your codebase into surfaces, features, entities, and flows &mdash;
-          from both PM and Eng perspectives.
-        </div>
-
-        <div class="welcome-features">
-          <span class="welcome-feature">Explore the dashboard</span>
-          <span class="welcome-feature-sep">&middot;</span>
-          <span class="welcome-feature">Audit code health</span>
-          <span class="welcome-feature-sep">&middot;</span>
-          <span class="welcome-feature">Copy context for your agent</span>
-        </div>
-
-        <div
-          class="drop-zone"
-          id="drop-zone"
-          role="button"
-          tabindex="0"
-          aria-label="Load cartograph.json"
-        >
-          <div class="drop-zone-title">
-            Drop <code>cartograph.json</code> here
+        <!-- Dashboard Preview -->
+        <div class="preview-dashboard">
+          <div class="preview-mock-banner">
+            Sample dashboard &mdash; upload your file below for real data
           </div>
-          <div class="drop-zone-sub">or browse for the generated file</div>
-          <button class="drop-zone-btn" id="browse-btn">Browse files</button>
-          <div class="drop-zone-error" id="drop-zone-error"></div>
-          <input
-            type="file"
-            id="file-input"
-            accept=".json"
-            style="display: none"
-          />
-        </div>
-
-        <!-- Invariants quick-reference -->
-        <div class="welcome-divider"></div>
-        <div class="welcome-section">
-          <div class="welcome-section-title">Invariants</div>
-          <div class="welcome-steps">
-            <div>
-              <strong style="color: var(--text)">Add an invariant</strong><br />
-              Tell the skill what should always be true, in plain language:<br />
-              <code
-                >/cartograph add this invariant: "credits are always refunded on
-                failed generations"</code
-              ><br />
-              <span style="color: var(--text-dim); font-size: 12px">
-                The agent expands your one-liner into a full definition with
-                verification steps, pass criteria, known scope, and a
-                verification prompt &mdash; then runs an initial check.
-                Definitions are saved to
-                <code>cartograph-invariants.md</code> at your repo root.
-              </span>
+          <div class="preview-tab-bar">
+            <span class="preview-pill active" data-preview-tab="overview">Overview</span>
+            <span class="preview-group-sep"></span>
+            <span class="preview-group-label pm">PM</span>
+            <span class="preview-pill" data-preview-tab="surfaces">Surfaces</span>
+            <span class="preview-pill" data-preview-tab="features">Features</span>
+            <span class="preview-pill" data-preview-tab="flows">Flows</span>
+            <span class="preview-pill" data-preview-tab="invariants">Invariants</span>
+            <span class="preview-group-sep"></span>
+            <span class="preview-group-label eng">Eng</span>
+            <span class="preview-pill" data-preview-tab="techstack">Tech Stack</span>
+            <span class="preview-pill" data-preview-tab="featuremap">Feature Map</span>
+            <span class="preview-pill" data-preview-tab="datamodel">Data Model</span>
+            <span class="preview-pill" data-preview-tab="codeorg">Code Org</span>
+            <span class="preview-pill" data-preview-tab="codehealth">Code Health</span>
+          </div>
+          <div class="preview-content">
+            <div class="preview-pane active" data-preview-card="overview">
+              <div class="pv-stats">
+                <div class="pv-stat"><div class="pv-stat-num">12</div><div class="pv-stat-label">Surfaces</div></div>
+                <div class="pv-stat"><div class="pv-stat-num">47</div><div class="pv-stat-label">Features</div></div>
+                <div class="pv-stat"><div class="pv-stat-num">28</div><div class="pv-stat-label">Entities</div></div>
+                <div class="pv-stat"><div class="pv-stat-num">8</div><div class="pv-stat-label">Flows</div></div>
+              </div>
             </div>
-            <div>
-              <strong style="color: var(--text)">Verify invariants</strong
-              ><br />
-              Run just the invariant check without a full scan:<br />
-              <code>/cartograph verify invariants</code><br />
-              <span style="color: var(--text-dim); font-size: 12px">
-                Reads <code>cartograph-invariants.md</code>, checks each enabled
-                invariant against your codebase, and prints a pass/fail summary.
-                Results are written to the <code>invariants</code> key in
-                <code>cartograph.json</code> so you can view them in this
-                visualizer.
-              </span>
+            <div class="preview-pane" data-preview-card="surfaces">
+              <div class="pv-list">
+                <div class="pv-row">Home Feed</div>
+                <div class="pv-row">User Profile</div>
+                <div class="pv-row">Checkout</div>
+                <div class="pv-row">Notifications</div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="features">
+              <div class="pv-list">
+                <div class="pv-row">User Authentication</div>
+                <div class="pv-row">Full-Text Search</div>
+                <div class="pv-row">Payment Processing</div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="flows">
+              <div class="pv-flow">
+                <div class="pv-step">Signup</div>
+                <span class="pv-arrow">&rarr;</span>
+                <div class="pv-step">Verify</div>
+                <span class="pv-arrow">&rarr;</span>
+                <div class="pv-step">Onboard</div>
+                <span class="pv-arrow">&rarr;</span>
+                <div class="pv-step">Dashboard</div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="invariants">
+              <div class="pv-checks">
+                <div class="pv-check pass">&#10003; Credits refunded on failure</div>
+                <div class="pv-check pass">&#10003; Free trial always 14 days</div>
+                <div class="pv-check fail">&#10007; Deleted users lose access</div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="techstack">
+              <div class="pv-pills">
+                <div class="pv-pill">TypeScript</div>
+                <div class="pv-pill">React</div>
+                <div class="pv-pill">Node.js</div>
+                <div class="pv-pill">PostgreSQL</div>
+                <div class="pv-pill">Redis</div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="featuremap">
+              <div class="pv-list" style="max-width:340px">
+                <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/feed/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--pm-accent-dim);color:var(--pm-accent)">Home Feed</span></div>
+                <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/profile/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--accent-dim);color:var(--accent)">User Profile</span></div>
+                <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/checkout/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--green-dim);color:var(--green)">Checkout</span></div>
+                <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/notifications/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--purple-dim);color:var(--purple)">Notifications</span></div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="datamodel">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+                <div class="pv-graph">
+                  <div class="pv-node" style="border-color:var(--accent);color:var(--accent)">User</div>
+                  <div class="pv-edge"></div>
+                  <div class="pv-node" style="border-color:var(--pm-accent);color:var(--pm-accent)">Order</div>
+                  <div class="pv-edge"></div>
+                  <div class="pv-node" style="border-color:var(--green);color:var(--green)">Product</div>
+                </div>
+                <div style="display:flex;gap:0;align-items:center">
+                  <div style="width:20px;height:2px;background:transparent"></div>
+                  <div style="width:2px;height:20px;background:var(--text-dim)"></div>
+                  <div style="width:20px;height:2px;background:transparent"></div>
+                </div>
+                <div class="pv-graph">
+                  <div class="pv-node" style="border-color:var(--purple);color:var(--purple)">Session</div>
+                  <div class="pv-edge"></div>
+                  <div class="pv-node" style="border-color:var(--orange);color:var(--orange)">Payment</div>
+                  <div class="pv-edge"></div>
+                  <div class="pv-node" style="border-color:var(--pink);color:var(--pink)">Review</div>
+                </div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="codeorg">
+              <div class="pv-modules">
+                <div class="pv-module" style="border-color:rgba(91,141,239,0.3)">
+                  <div class="pv-module-name" style="color:var(--pm-accent)">Checkout</div>
+                  <div class="pv-module-boxes">
+                    <div class="pv-module-box" style="background:var(--pm-accent-dim);color:var(--pm-accent)">src/cart/</div>
+                    <div class="pv-module-box" style="background:var(--pm-accent-dim);color:var(--pm-accent)">PaymentForm.tsx</div>
+                    <div class="pv-module-box" style="background:var(--pm-accent-dim);color:var(--pm-accent)">receipt.ts</div>
+                  </div>
+                </div>
+                <div class="pv-module" style="border-color:rgba(200,167,80,0.3)">
+                  <div class="pv-module-name" style="color:var(--accent)">User Profile</div>
+                  <div class="pv-module-boxes">
+                    <div class="pv-module-box" style="background:var(--accent-dim);color:var(--accent)">src/profile/</div>
+                    <div class="pv-module-box" style="background:var(--accent-dim);color:var(--accent)">Avatar.tsx</div>
+                    <div class="pv-module-box" style="background:var(--accent-dim);color:var(--accent)">settings.ts</div>
+                  </div>
+                </div>
+                <div class="pv-module" style="border-color:rgba(78,173,122,0.3)">
+                  <div class="pv-module-name" style="color:var(--green)">Home Feed</div>
+                  <div class="pv-module-boxes">
+                    <div class="pv-module-box" style="background:var(--green-dim);color:var(--green)">src/feed/</div>
+                    <div class="pv-module-box" style="background:var(--green-dim);color:var(--green)">Timeline.tsx</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="preview-pane" data-preview-card="codehealth">
+              <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px 4px 0 0">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span><span style="font-size:14px;color:var(--text)">Co-location</span></div>
+                  <span style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)">92%</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border)">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block"></span><span style="font-size:14px;color:var(--text)">DRYness</span></div>
+                  <span style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent)">74%</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:0 0 4px 4px">
+                  <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block"></span><span style="font-size:14px;color:var(--text)">Dead Code</span></div>
+                  <span style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--red)">38%</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <div class="welcome-divider"></div>
 
-        <div
-          class="welcome-landing-link"
-          style="
-            margin-top: 1.25rem;
-            font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.3);
-            line-height: 1.6;
-          "
-        >
-          Open this file locally, or use the hosted version:<br />
-          <code style="color: rgba(255, 255, 255, 0.5); font-size: 0.75rem"
-            >open https://tools.cartograph.sh/visualizer</code
+        <div style="display:flex;flex-direction:column;align-items:center;gap:20px;width:100%">
+          <div class="preview-cta">
+            Upload your <code>cartograph.json</code> to get your own dashboard
+            like this.
+          </div>
+
+          <div
+            class="drop-zone"
+            id="drop-zone"
+            role="button"
+            tabindex="0"
+            aria-label="Load cartograph.json"
           >
+            <div class="drop-zone-title">
+              Drop <code>cartograph.json</code> here
+            </div>
+            <div class="drop-zone-sub">or browse for the generated file</div>
+            <button class="drop-zone-btn" id="browse-btn">Browse files</button>
+            <div class="drop-zone-error" id="drop-zone-error"></div>
+            <input
+              type="file"
+              id="file-input"
+              accept=".json"
+              style="display: none"
+            />
+          </div>
         </div>
 
-        <div class="welcome-landing-link">
-          <a
-            href="https://cartograph.sh"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Learn more at cartograph.sh &rarr;</a
-          >
+        <div style="display:flex;flex-direction:column;align-items:center;gap:16px;width:100%">
+          <div class="welcome-divider"></div>
+          <div class="welcome-landing-link">
+            <a
+              href="https://cartograph.sh"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Learn more at cartograph.sh &rarr;</a
+            >
+          </div>
         </div>
+
+        <script>
+          document
+            .querySelector(".preview-tab-bar")
+            ?.addEventListener("click", function (e) {
+              var pill = e.target.closest(".preview-pill");
+              if (!pill || !pill.dataset.previewTab) return;
+              document
+                .querySelectorAll(".preview-pill")
+                .forEach(function (p) {
+                  p.classList.remove("active");
+                });
+              pill.classList.add("active");
+              document
+                .querySelectorAll(".preview-pane")
+                .forEach(function (p) {
+                  p.classList.remove("active");
+                });
+              var pane = document.querySelector(
+                '[data-preview-card="' + pill.dataset.previewTab + '"]',
+              );
+              if (pane) pane.classList.add("active");
+            });
+        </script>
       </div>
     </div>
 
