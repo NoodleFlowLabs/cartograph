@@ -131,8 +131,10 @@ Works in Claude Code, Codex, or any agent that supports skills. This scans your 
 Bun is required for the local UI. Install it from [bun.sh](https://bun.sh), then start the bundled Cartograph UI from your project root:
 
 ```bash
-bun install --cwd skills/cartograph/ui
-bun skills/cartograph/ui/server.ts
+UI_DIR=$(find .agents/skills .claude/skills skills -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
+test -n "$UI_DIR" || { echo "Cartograph UI not found"; exit 1; }
+bun install --cwd "$UI_DIR"
+bun "$UI_DIR/server.ts"
 ```
 
 Open the printed local URL, usually `http://127.0.0.1:6270`. The UI reads `cartograph.json` from disk and refreshes automatically when you run `/cartograph` again.
