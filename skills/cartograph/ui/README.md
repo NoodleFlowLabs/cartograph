@@ -3,7 +3,7 @@
 Local React UI served by Bun from the installed Cartograph skill.
 
 ```bash
-UI_DIR=$(find .agents/skills .claude/skills skills -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
+UI_DIR=$(find .agents/skills .claude/skills skills "${CODEX_HOME:-$HOME/.codex}/skills" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
 test -n "$UI_DIR" || { echo "Cartograph UI not found"; exit 1; }
 bun install --cwd "$UI_DIR"
 bun "$UI_DIR/server.ts"

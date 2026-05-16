@@ -131,7 +131,7 @@ Works in Claude Code, Codex, or any agent that supports skills. This scans your 
 Bun is required for the local UI. Install it from [bun.sh](https://bun.sh), then start the bundled Cartograph UI from your project root:
 
 ```bash
-UI_DIR=$(find .agents/skills .claude/skills skills -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
+UI_DIR=$(find .agents/skills .claude/skills skills "${CODEX_HOME:-$HOME/.codex}/skills" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
 test -n "$UI_DIR" || { echo "Cartograph UI not found"; exit 1; }
 bun install --cwd "$UI_DIR"
 bun "$UI_DIR/server.ts"

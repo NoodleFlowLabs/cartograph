@@ -61,7 +61,7 @@
     <main>
       <h1>Cartograph runs locally.</h1>
       <p>After installing the skill, run this from your project root:</p>
-      <pre><code>UI_DIR=$(find .agents/skills .claude/skills skills -path '*/cartograph/ui' -type d -print -quit 2&gt;/dev/null)
+      <pre><code>UI_DIR=$(find .agents/skills .claude/skills skills "${CODEX_HOME:-$HOME/.codex}/skills" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" -path '*/cartograph/ui' -type d -print -quit 2&gt;/dev/null)
 test -n "$UI_DIR" || { echo "Cartograph UI not found"; exit 1; }
 bun install --cwd "$UI_DIR"
 bun "$UI_DIR/server.ts"</code></pre>
