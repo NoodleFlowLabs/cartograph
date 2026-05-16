@@ -1,0 +1,16 @@
+{
+  "name": "@cartograph/ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun server.ts"
+  },
+  "dependencies": {
+    "@types/bun": "^1.2.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {}
+}
