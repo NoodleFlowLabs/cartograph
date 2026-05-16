@@ -4470,10 +4470,21 @@ function setupLocalFileFallback() {
 
   dropZone.addEventListener("dragover", (e) => {
     e.preventDefault();
+    e.stopPropagation();
     dropZone.classList.add("dragover");
   });
   dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
   dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove("dragover");
+    handleFile((e as DragEvent).dataTransfer?.files[0] || null);
+  });
+
+  document.body.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+  document.body.addEventListener("drop", (e) => {
     e.preventDefault();
     dropZone.classList.remove("dragover");
     handleFile((e as DragEvent).dataTransfer?.files[0] || null);
