@@ -4393,10 +4393,13 @@ In Cartograph, a **compartment** is a logical grouping of related files that for
           document.getElementById("drop-zone-error").style.display = "none";
           document.body.classList.add("has-data");
           init();
+          return true;
         } catch (e) {
           const err = document.getElementById("drop-zone-error");
           err.textContent = "Invalid JSON: " + e.message;
           err.style.display = "block";
+          document.body.classList.remove("has-data");
+          return false;
         }
       }
 
@@ -4428,8 +4431,9 @@ async function loadDataFromServer() {
   try {
     const response = await fetchCartograph();
     currentProjectRoot = response.projectRoot || null;
-    loadData(response.data);
-    clearLoadError();
+    if (loadData(response.data)) {
+      clearLoadError();
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load cartograph.json";
     document.body.classList.remove("has-data");
