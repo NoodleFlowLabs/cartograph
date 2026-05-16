@@ -120,13 +120,13 @@ async function handleGetCartograph() {
     );
   }
 
+  const text = await readFile(cartographPath, "utf8");
   try {
-    const text = await readFile(cartographPath, "utf8");
     return Response.json({ data: JSON.parse(text), projectRoot });
   } catch (error) {
     if (error instanceof SyntaxError) {
       return Response.json(
-        { error: "invalid JSON", ...getJsonErrorPosition(error) },
+        { error: "invalid JSON", ...getJsonErrorPosition(error, text) },
         { status: 500 },
       );
     }
@@ -288,12 +288,18 @@ function isAddressInUse(error: unknown) {
   );
 }
 
-function getJsonErrorPosition(error: SyntaxError) {
+function getJsonErrorPosition(error: SyntaxError, text: string) {
   const match = /position (\d+)/i.exec(error.message);
   if (!match) return {};
 
   const position = Number(match[1]);
   if (!Number.isInteger(position)) return {};
 
-  return { position };
+  const beforePosition = text.slice(0, position);
+  const lines = beforePosition.split("\n");
+  return {
+    position,
+    line: lines.length,
+    col: lines[lines.length - 1].length + 1,
+  };
 }
