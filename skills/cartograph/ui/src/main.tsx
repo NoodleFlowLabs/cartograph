@@ -1,12 +1,11 @@
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { mountVisualizer } from "./legacy-visualizer";
+import "./styles.css";
 
 function CartographRoot() {
-  useEffect(() => {
-    document.body.classList.add("cartograph-ui-ready");
-  }, []);
-
+  useEffect(() => mountVisualizer(), []);
   return <App />;
 }
 
