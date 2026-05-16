@@ -1,10 +1,46 @@
 {
   "version": 1,
   "skills": {
+    "deslop": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/deslop/SKILL.md",
+      "computedHash": "596725ad1a4dc634b621df242f6a3b16d0ed703b244c1bc90a407f6375644b03"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
       "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
+    "graphite": {
+      "source": "withgraphite/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/graphite/SKILL.md",
+      "computedHash": "9315b842df6de2a23216a2e72033fa99337398a8d62c11d6c320e55a6b810339"
+    },
+    "ship": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ship/SKILL.md",
+      "computedHash": "4891bdf8bb5629b95607964473613138e0a21dcb8b6d03595eac16ccf20b63ae"
+    },
+    "spec-builder": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/spec-builder/SKILL.md",
+      "computedHash": "f707af205f3e0c30e6c92d84c5363bf63743df284c2fc05c3db3d9fbb502e017"
+    },
+    "ticket": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ticket/SKILL.md",
+      "computedHash": "ce6fd27800ccb034c97b00402a62bac256802bd597db5cfb3433b3cc90802ae9"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212"
     }
   }
 }
