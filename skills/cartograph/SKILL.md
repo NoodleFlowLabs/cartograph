@@ -473,7 +473,14 @@ Run this yourself (no agent needed). Merge all agent outputs into the final JSON
 6. If Agent 11 returned a non-null result, include `"invariants": <agent-11-result>` in the final JSON. If Agent 11 returned `null` (no definitions file), omit the `invariants` key entirely.
 7. Assemble the final JSON following the schema in `references/json-schema.md`
 8. Write `cartograph.json` to the repo root
-9. Tell the user: "Run `bun install --cwd skills/cartograph/ui` if dependencies are missing, then run `bun skills/cartograph/ui/server.ts` from your project root and open the printed local URL (usually `http://127.0.0.1:6270`)." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
+9. Tell the user to run this from their project root, then open the printed local URL (usually `http://127.0.0.1:6270`):
+   ```bash
+   UI_DIR=$(find .agents/skills .claude/skills skills -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
+   test -n "$UI_DIR" || { echo "Cartograph UI not found"; exit 1; }
+   bun install --cwd "$UI_DIR"
+   bun "$UI_DIR/server.ts"
+   ```
+   If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
 
 ## Important
 
