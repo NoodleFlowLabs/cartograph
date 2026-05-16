@@ -264,7 +264,11 @@ function inferProjectRootFromSkillLayout() {
   }
 
   if (!uiRoot.endsWith(`${sep}skills${sep}cartograph${sep}ui`)) return null;
-  return resolve(uiRoot, "..", "..", "..");
+
+  const repoLocalRoot = resolve(uiRoot, "..", "..", "..");
+  if (existsSync(resolve(repoLocalRoot, ".git"))) return repoLocalRoot;
+
+  return null;
 }
 
 function resolveInProjectRoot(rel: string) {
