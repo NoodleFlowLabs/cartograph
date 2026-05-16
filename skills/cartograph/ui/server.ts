@@ -16,7 +16,7 @@ const clients = new Set<Client>();
 const uiRoot = import.meta.dir;
 if (!existsSync(resolve(uiRoot, "node_modules"))) {
   console.error("Dependencies not installed. Run:");
-  console.error("  bun install --cwd skills/cartograph/ui");
+  console.error(`  bun install --cwd ${JSON.stringify(uiRoot)}`);
   process.exit(1);
 }
 
