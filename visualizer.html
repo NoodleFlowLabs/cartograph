@@ -1,6 +1,68 @@
-<!-- Redirect for ease of access from tools.cartograph.sh.ai/visualizer -->
 <!doctype html>
-<meta
-  http-equiv="refresh"
-  content="0; url=skills/cartograph/assets/visualizer.html"
-/>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cartograph runs locally</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #050507;
+        --surface: #111116;
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #e8e5dd;
+        --muted: #8a8780;
+        --accent: #c8a750;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      main {
+        width: min(560px, 100%);
+      }
+      h1 {
+        margin: 0 0 14px;
+        font-size: 32px;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 0 0 20px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      pre {
+        margin: 0 0 18px;
+        padding: 18px;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--accent);
+        font:
+          14px/1.5 "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Cartograph runs locally.</h1>
+      <p>After installing the skill, run this from your project root:</p>
+      <pre><code>bun skills/cartograph/ui/server.ts</code></pre>
+      <p>Then open <a href="http://127.0.0.1:6270">http://127.0.0.1:6270</a>.</p>
+    </main>
+  </body>
+</html>

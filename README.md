@@ -126,15 +126,15 @@ npx skills add NoodleFlowLabs/cartograph --skill cartograph
 
 Works in Claude Code, Codex, or any agent that supports skills. This scans your entire codebase and outputs `cartograph.json` with all findings into your project root.
 
-### 3. Explore
+### 3. Explore Locally
 
-Open the bundled visualizer (`assets/visualizer.html`) in your browser, or use the hosted copy:
+Bun is required for the local UI. Install it from [bun.sh](https://bun.sh), then start the bundled Cartograph UI from your project root:
 
 ```bash
-open https://tools.cartograph.sh/visualizer
+bun skills/cartograph/ui/server.ts
 ```
 
-Drag-drop `cartograph.json` into the visualizer and explore every dimension.
+Open the printed local URL, usually `http://127.0.0.1:6270`. The UI reads `cartograph.json` from disk and refreshes automatically when you run `/cartograph` again.
 
 ### 4. Iterate
 

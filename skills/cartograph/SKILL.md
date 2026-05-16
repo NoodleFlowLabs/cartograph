@@ -6,7 +6,7 @@ description: >
   entry points (pages/routes); features are standalone capabilities embedded across
   surfaces (e.g., "Prompt Wizard", "Star Credits", "Content Unlock"); compartments are
   logical groupings of related code files that bridge product concepts to the underlying
-  codebase. Produces a JSON file and an interactive HTML visualizer. Use when the user
+  codebase. Produces a JSON file and an interactive local UI. Use when the user
   wants to understand a codebase, map its structure, see what entities exist, understand
   data flows, examine code organization, or get a high-level overview of what an app does.
   Triggers on: "map this codebase", "what does this app do", "show me the entities",
