@@ -255,8 +255,15 @@ async function findProjectRoot() {
 }
 
 function inferProjectRootFromSkillLayout() {
-  const suffix = `${sep}skills${sep}cartograph${sep}ui`;
-  if (!uiRoot.endsWith(suffix)) return null;
+  const agentSkillSuffixes = [
+    `${sep}.agents${sep}skills${sep}cartograph${sep}ui`,
+    `${sep}.claude${sep}skills${sep}cartograph${sep}ui`,
+  ];
+  if (agentSkillSuffixes.some((suffix) => uiRoot.endsWith(suffix))) {
+    return resolve(uiRoot, "..", "..", "..", "..");
+  }
+
+  if (!uiRoot.endsWith(`${sep}skills${sep}cartograph${sep}ui`)) return null;
   return resolve(uiRoot, "..", "..", "..");
 }
 
