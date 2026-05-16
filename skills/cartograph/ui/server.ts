@@ -73,59 +73,29 @@ async function startServer() {
 }
 
 async function serveOnPort(port: number) {
-  const appServer = Bun.serve({
-    port: 0,
+  return Bun.serve({
+    port,
     hostname: "127.0.0.1",
-    development: false,
+    development: true,
     idleTimeout: 0,
     routes: {
       "/": index,
-    },
-    fetch: () => new Response("not found", { status: 404 }),
-  });
-
-  try {
-    return Bun.serve({
-      port,
-      hostname: "127.0.0.1",
-      development: true,
-      idleTimeout: 0,
-      routes: {
-        "/cartograph-logo.svg": withOrigin(port, serveLogo),
-        "/api/cartograph": {
-          GET: withOrigin(port, handleGetCartograph),
-        },
-        "/api/cartograph/stream": {
-          GET: withOrigin(port, handleCartographStream),
-        },
-        "/api/cartograph/save": {
-          POST: withOrigin(port, handleSaveCartograph),
-        },
-        "/api/invariants/save": {
-          POST: withOrigin(port, handleSaveInvariants),
-        },
+      "/cartograph-logo.svg": withOrigin(port, serveLogo),
+      "/api/cartograph": {
+        GET: withOrigin(port, handleGetCartograph),
       },
-      fetch: withOrigin(port, (req) => proxyAppRequest(req, appServer)),
-    });
-  } catch (error) {
-    appServer.stop(true);
-    throw error;
-  }
-}
-
-async function proxyAppRequest(req: Request, appServer: Bun.Server) {
-  const url = new URL(req.url);
-  if (url.pathname.startsWith("/api/")) {
-    return new Response("not found", { status: 404 });
-  }
-
-  const proxiedUrl = new URL(url.pathname + url.search, appServer.url);
-  return fetch(
-    new Request(proxiedUrl, {
-      headers: req.headers,
-      method: req.method,
-    }),
-  );
+      "/api/cartograph/stream": {
+        GET: withOrigin(port, handleCartographStream),
+      },
+      "/api/cartograph/save": {
+        POST: withOrigin(port, handleSaveCartograph),
+      },
+      "/api/invariants/save": {
+        POST: withOrigin(port, handleSaveInvariants),
+      },
+    },
+    fetch: withOrigin(port, () => new Response("not found", { status: 404 })),
+  });
 }
 
 function withOrigin(
