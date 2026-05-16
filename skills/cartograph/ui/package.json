@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "bun server.ts"
+    "start": "CARTOGRAPH_PROJECT_ROOT=${CARTOGRAPH_PROJECT_ROOT:-$INIT_CWD} bun server.ts"
   },
   "dependencies": {
     "@types/bun": "^1.2.0",

@@ -264,6 +264,17 @@ async function findProjectRoot() {
     return resolve(process.env.CARTOGRAPH_PROJECT_ROOT);
   }
 
+  if (process.cwd() === uiRoot) {
+    const projectRootFromSkillLayout = inferProjectRootFromSkillLayout();
+    if (projectRootFromSkillLayout) return projectRootFromSkillLayout;
+
+    console.error("Project root could not be inferred from the UI package directory.");
+    console.error("Run from your project root:");
+    console.error("  bun skills/cartograph/ui/server.ts");
+    console.error("Or set CARTOGRAPH_PROJECT_ROOT to the project root before starting the UI.");
+    process.exit(1);
+  }
+
   let dir = process.cwd();
   while (true) {
     if (existsSync(resolve(dir, "cartograph.json"))) return dir;
@@ -271,6 +282,12 @@ async function findProjectRoot() {
     if (parent === dir) return process.cwd();
     dir = parent;
   }
+}
+
+function inferProjectRootFromSkillLayout() {
+  const suffix = `${sep}skills${sep}cartograph${sep}ui`;
+  if (!uiRoot.endsWith(suffix)) return null;
+  return resolve(uiRoot, "..", "..", "..");
 }
 
 function resolveInProjectRoot(rel: string) {
