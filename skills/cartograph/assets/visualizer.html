@@ -68,8 +68,10 @@
     <main>
       <h1>Cartograph runs locally.</h1>
       <p>The visualizer now runs as a local UI. Run this from your project root:</p>
-      <pre><code>bun install --cwd skills/cartograph/ui
-bun skills/cartograph/ui/server.ts</code></pre>
+      <pre><code>UI_DIR=$(find .agents/skills .claude/skills skills "${CODEX_HOME:-$HOME/.codex}/skills" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" -path '*/cartograph/ui' -type d -print -quit 2&gt;/dev/null)
+test -n "$UI_DIR" || { echo "Cartograph UI not found"; exit 1; }
+bun install --cwd "$UI_DIR"
+bun "$UI_DIR/server.ts"</code></pre>
       <p>
         Then open the printed local URL, usually
         <a href="http://127.0.0.1:6270">http://127.0.0.1:6270</a>.

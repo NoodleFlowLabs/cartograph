@@ -475,7 +475,7 @@ Run this yourself (no agent needed). Merge all agent outputs into the final JSON
 8. Write `cartograph.json` to the repo root
 9. Tell the user to run this from their project root, then open the printed local URL (usually `http://127.0.0.1:6270`):
    ```bash
-   UI_DIR=$(find .agents/skills .claude/skills skills -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
+   UI_DIR=$(find .agents/skills .claude/skills skills "${CODEX_HOME:-$HOME/.codex}/skills" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" -path '*/cartograph/ui' -type d -print -quit 2>/dev/null)
    test -n "$UI_DIR" || { echo "Cartograph UI not found"; exit 1; }
    bun install --cwd "$UI_DIR"
    bun "$UI_DIR/server.ts"
