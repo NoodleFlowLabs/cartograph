@@ -21,4 +21,4 @@ The local runtime server lives in `../server-src` and is bundled to `../skills/c
 - `POST /api/cartograph/save`
 - `POST /api/invariants/save`
 
-The current React app is only the foundation shell. The full static visualizer port should replace it in later PRs.
+The React app is the source for the bundled local visualizer. The built output in `../skills/cartograph/ui` is what gets installed with the skill.

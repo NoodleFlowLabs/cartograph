@@ -100,7 +100,7 @@ Run just the invariant verification step without a full scan:
 /cartograph verify invariants
 ```
 
-This reads `cartograph-invariants.md`, checks each enabled invariant against your codebase, and prints a pass/fail summary. Results are also written to the `invariants` key in `cartograph.json` (all other data is preserved), so you can view them in the visualizer.
+This reads `cartograph-invariants.md`, checks each enabled invariant against your codebase, and prints a pass/fail summary. Results are also written to the `invariants` key in `cartograph.json` (all other data is preserved), so you can view them in the local UI.
 
 ### Copy-Paste Prompts
 
@@ -128,13 +128,13 @@ Works in Claude Code, Codex, or any agent that supports skills. This scans your 
 
 ### 3. Explore
 
-Open the bundled visualizer (`assets/visualizer.html`) in your browser, or use the hosted copy:
+Start the bundled local UI from your project root:
 
 ```bash
-open https://tools.cartograph.sh/visualizer
+node skills/cartograph/server.mjs
 ```
 
-Drag-drop `cartograph.json` into the visualizer and explore every dimension.
+The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map.
 
 ### 4. Iterate
 
