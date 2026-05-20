@@ -140,7 +140,7 @@ export function CodeHealthPanel({
               <h2>{text(metric, 'name')}</h2>
               <p>{text(metric, 'summary') || text(metric, 'description')}</p>
             </div>
-            <span className={`health-score ${metricState(num(metric, 'score'))}`}>
+            <span className={`health-score ${metricState(metric)}`}>
               {Math.round(num(metric, 'score'))}%
             </span>
           </div>

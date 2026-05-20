@@ -32,7 +32,7 @@ export const formatter = new Intl.DateTimeFormat(undefined, {
 export function getVisibleTabs(data: JsonObject | null): TabConfig[] {
   return tabs.filter((tab) => {
     if (tab.id !== 'invariants') return true
-    return Boolean(data && getInvariants(data))
+    return Boolean(data && isRecord(data.invariants))
   })
 }
 
@@ -52,9 +52,9 @@ export function normalizeData(data: JsonObject): JsonObject {
 }
 
 export function getInvariants(data: JsonObject): { summary: JsonObject; results: JsonObject[] } | null {
-  const invariants = record(data, 'invariants')
+  if (!isRecord(data.invariants)) return null
+  const invariants = data.invariants
   const results = arr(invariants, 'results')
-  if (!results.length) return null
   return { results, summary: record(invariants, 'summary') }
 }
 
@@ -161,10 +161,19 @@ export function exposureLabel(data: JsonObject, entityId: string): string {
   return 'cross-cutting'
 }
 
-export function metricState(score: number): 'green' | 'yellow' | 'red' {
-  if (score >= 90) return 'green'
-  if (score >= 70) return 'yellow'
+export function metricState(metric: JsonObject): 'green' | 'yellow' | 'red' {
+  const score = num(metric, 'score')
+  const thresholds = record(metric, 'thresholds')
+  const green = thresholdValue(thresholds, 'green', 90)
+  const yellow = thresholdValue(thresholds, 'yellow', 70)
+  if (score >= green) return 'green'
+  if (score >= yellow) return 'yellow'
   return 'red'
+}
+
+function thresholdValue(item: JsonObject, key: string, fallback: number): number {
+  const value = item[key]
+  return typeof value === 'number' ? value : fallback
 }
 
 export function nodeStyle(index: number, total: number): CSSProperties {

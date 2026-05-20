@@ -50,7 +50,7 @@ export function Overview({
                   onClick={() => switchTab('codehealth')}
                   type="button"
                 >
-                  <span className={`score-dot ${metricState(num(metric, 'score'))}`} />
+                  <span className={`score-dot ${metricState(metric)}`} />
                   {text(metric, 'name') || itemId(metric)} {Math.round(num(metric, 'score'))}%
                 </button>
               ))}
