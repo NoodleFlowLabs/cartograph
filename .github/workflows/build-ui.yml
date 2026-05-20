@@ -1,0 +1,61 @@
+name: Build UI artifacts
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check source
+        run: pnpm check
+
+      - name: Build generated skill artifacts
+        run: pnpm build
+
+      - name: Verify generated artifacts are current
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -n "$(git status --porcelain -- skills/cartograph/server.mjs skills/cartograph/ui)" ]; then
+            git status --short -- skills/cartograph/server.mjs skills/cartograph/ui
+            git diff -- skills/cartograph/server.mjs skills/cartograph/ui
+            exit 1
+          fi
+
+      - name: Commit rebuilt artifacts on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if [ -z "$(git status --porcelain -- skills/cartograph/server.mjs skills/cartograph/ui)" ]; then
+            echo "Generated artifacts are already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add skills/cartograph/server.mjs skills/cartograph/ui
+          git commit -m "Rebuild Cartograph UI artifacts"
+          git push
