@@ -1,13 +1,33 @@
 :root {
-  color: #283246;
-  background: #eef2f6;
-  font-family:
-    ui-sans-serif,
-    system-ui,
+  --bg: #050507;
+  --surface: #0a0a0e;
+  --surface-2: #111116;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.14);
+  --text: #e8e5dd;
+  --text-muted: #9b968a;
+  --text-dim: #625f57;
+  --accent: #c8a750;
+  --accent-dim: rgba(200, 167, 80, 0.14);
+  --green: #4ead7a;
+  --yellow: #c8b44a;
+  --red: #cd5c5c;
+  --radius: 4px;
+  --font:
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
+    Roboto,
     sans-serif;
+  --mono:
+    "SF Mono",
+    "Fira Code",
+    "Fira Mono",
+    Menlo,
+    monospace;
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -22,6 +42,17 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  overflow-x: hidden;
+  background: var(--bg);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  letter-spacing: 0;
 }
 
 h1,
@@ -30,37 +61,11 @@ p {
   margin: 0;
 }
 
-h1 {
-  color: #101725;
-  font-size: clamp(34px, 5vw, 56px);
-  line-height: 0.98;
-}
-
-h2 {
-  margin-bottom: 8px;
-  color: #101725;
-  font-size: 20px;
-  line-height: 1.2;
-}
-
-p {
-  color: #526077;
-  font-size: 16px;
-  line-height: 1.55;
-}
-
 code {
-  display: block;
-  overflow-wrap: anywhere;
-  padding: 10px 12px;
-  border: 1px solid #d9e0ea;
-  border-radius: 6px;
-  color: #172033;
-  background: #ffffff;
-  font-family:
-    "SFMono-Regular",
-    Consolas,
-    "Liberation Mono",
-    monospace;
-  font-size: 13px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  font-family: var(--mono);
+  font-size: 0.92em;
 }

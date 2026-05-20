@@ -1,20 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react'
+import { InvariantBadge, Stat } from './components/common'
+import { Panel } from './components/layout/Panel'
+import { Sidebar } from './components/layout/Sidebar'
+import { Welcome } from './features/welcome/Welcome'
+import {
+  arr,
+  formatter,
+  getVisibleTabs,
+  isRecord,
+  normalizeData,
+  text,
+} from './lib/cartograph'
+import type { LoadState, TabId } from './types'
 import './App.css'
-
-type LoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; data: unknown; lastUpdated: Date }
-  | { status: 'missing'; message: string }
-  | { status: 'error'; message: string }
-
-const formatter = new Intl.DateTimeFormat(undefined, {
-  hour: 'numeric',
-  minute: '2-digit',
-  second: '2-digit',
-})
 
 function App() {
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' })
+  const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [dragging, setDragging] = useState(false)
+  const data = loadState.status === 'ready' ? loadState.data : null
+  const visibleTabs = useMemo(() => getVisibleTabs(data), [data])
+  const displayTab = visibleTabs.some((tab) => tab.id === activeTab)
+    ? activeTab
+    : 'overview'
+  const activeConfig = visibleTabs.find((tab) => tab.id === displayTab)
 
   const loadCartograph = useCallback(async () => {
     try {
@@ -25,21 +36,26 @@ function App() {
         setLoadState({
           status: 'missing',
           message:
-            body?.error ??
+            text(body, 'error') ||
             'No cartograph.json found. Run /cartograph from your agent.',
         })
         return
       }
 
-      if (!response.ok) {
+      if (!response.ok || !isRecord(body)) {
         setLoadState({
           status: 'error',
-          message: body?.error ?? `Request failed with ${response.status}`,
+          message: text(body, 'error') || `Request failed with ${response.status}`,
         })
         return
       }
 
-      setLoadState({ status: 'ready', data: body, lastUpdated: new Date() })
+      setLoadState({
+        status: 'ready',
+        data: normalizeData(body),
+        lastUpdated: new Date(),
+        source: 'local server',
+      })
     } catch (error) {
       setLoadState({
         status: 'error',
@@ -64,109 +80,138 @@ function App() {
     }
   }, [loadCartograph])
 
-  const summary = useMemo(() => summarizeCartograph(loadState), [loadState])
+  function switchTab(tabId: TabId, nextSelectedId?: string) {
+    setActiveTab(tabId)
+    setSelectedId(nextSelectedId ?? null)
+    setSearch('')
+  }
+
+  async function loadDroppedFile(file: File | undefined) {
+    if (!file) return
+
+    try {
+      const parsed = JSON.parse(await file.text())
+      if (!isRecord(parsed)) throw new Error('Expected a JSON object')
+      setLoadState({
+        status: 'ready',
+        data: normalizeData(parsed),
+        lastUpdated: new Date(),
+        source: file.name,
+      })
+      setActiveTab('overview')
+      setSelectedId(null)
+      setSearch('')
+    } catch (error) {
+      setLoadState({
+        status: 'error',
+        message: `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      })
+    }
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setDragging(false)
+    void loadDroppedFile(event.dataTransfer.files[0])
+  }
+
+  if (loadState.status !== 'ready' || !data) {
+    return (
+      <Welcome
+        dragging={dragging}
+        loadState={loadState}
+        onDragLeave={() => setDragging(false)}
+        onDragOver={(event) => {
+          event.preventDefault()
+          setDragging(true)
+        }}
+        onDrop={handleDrop}
+        onFile={loadDroppedFile}
+        onRefresh={loadCartograph}
+      />
+    )
+  }
 
   return (
-    <main className="shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Cartograph local UI</p>
-          <h1>React foundation</h1>
+    <main className="app-shell">
+      <header className="header">
+        <div className="header-left">
+          <div className="logo">
+            <img src="/cartograph-logo.svg" width="22" height="22" alt="" />
+            Cartograph
+          </div>
         </div>
-        <span className={`status status-${loadState.status}`}>
-          {summary.statusLabel}
-        </span>
+        <div className="stats">
+          <Stat label="surfaces" value={arr(data, 'surfaces').length} />
+          <Stat label="features" value={arr(data, 'features').length} />
+          <Stat label="entities" value={arr(data, 'entities').length} />
+          <Stat label="flows" value={arr(data, 'flows').length} />
+          <span>updated {formatter.format(loadState.lastUpdated)}</span>
+        </div>
       </header>
 
-      <section className="panel">
-        <div>
-          <h2>{summary.heading}</h2>
-          <p>{summary.description}</p>
-        </div>
+      <nav className="tabs" aria-label="Cartograph sections">
+        {(['overview', 'pm', 'eng'] as const).map((group) => {
+          const groupTabs = visibleTabs.filter((tab) => tab.group === group)
+          if (!groupTabs.length) return null
 
-        {loadState.status === 'ready' ? (
-          <dl className="metrics" aria-label="Cartograph summary">
-            {summary.metrics.map((metric) => (
-              <div key={metric.label}>
-                <dt>{metric.label}</dt>
-                <dd>{metric.value}</dd>
+          return (
+            <div
+              className={`tab-cluster ${
+                groupTabs.some((tab) => tab.id === displayTab)
+                  ? 'active-group'
+                  : ''
+              }`}
+              data-group={group}
+              key={group}
+            >
+              {group !== 'overview' ? (
+                <span className="tab-group-label">{group}</span>
+              ) : null}
+              <div className="tab-cluster-items">
+                {groupTabs.map((tab) => (
+                  <button
+                    className={`tab ${tab.id === displayTab ? 'active' : ''}`}
+                    key={tab.id}
+                    onClick={() => switchTab(tab.id)}
+                    type="button"
+                  >
+                    {tab.label}
+                    {tab.id === 'invariants' ? (
+                      <InvariantBadge data={data} />
+                    ) : null}
+                  </button>
+                ))}
               </div>
-            ))}
-          </dl>
-        ) : null}
-      </section>
+            </div>
+          )
+        })}
+      </nav>
 
-      <section className="panel panel-muted">
-        <h2>Runtime endpoints</h2>
-        <ul>
-          <li>
-            <code>GET /api/cartograph</code>
-          </li>
-          <li>
-            <code>GET /api/cartograph/stream</code>
-          </li>
-          <li>
-            <code>POST /api/cartograph/save</code>
-          </li>
-          <li>
-            <code>POST /api/invariants/save</code>
-          </li>
-        </ul>
-      </section>
+      <div className="main">
+        {activeConfig?.sidebar ? (
+          <Sidebar
+            activeTab={displayTab}
+            data={data}
+            search={search}
+            selectedId={selectedId}
+            setSearch={setSearch}
+            setSelectedId={setSelectedId}
+          />
+        ) : null}
+
+        <section className="content">
+          <Panel
+            activeTab={displayTab}
+            data={data}
+            selectedId={selectedId}
+            setSelectedId={setSelectedId}
+            switchTab={switchTab}
+          />
+        </section>
+      </div>
     </main>
   )
-}
-
-function summarizeCartograph(loadState: LoadState) {
-  if (loadState.status === 'loading') {
-    return {
-      description: 'Connecting to the local Cartograph server.',
-      heading: 'Loading cartograph.json',
-      metrics: [],
-      statusLabel: 'Loading',
-    }
-  }
-
-  if (loadState.status === 'missing') {
-    return {
-      description: loadState.message,
-      heading: 'No map found',
-      metrics: [],
-      statusLabel: 'Missing',
-    }
-  }
-
-  if (loadState.status === 'error') {
-    return {
-      description: loadState.message,
-      heading: 'Unable to load the map',
-      metrics: [],
-      statusLabel: 'Error',
-    }
-  }
-
-  const record = isRecord(loadState.data) ? loadState.data : {}
-
-  return {
-    description: `Loaded at ${formatter.format(loadState.lastUpdated)}. Later PRs can replace this shell with the full visualizer port.`,
-    heading: 'cartograph.json is connected',
-    metrics: [
-      ['Surfaces', record.surfaces],
-      ['Features', record.features],
-      ['Flows', record.flows],
-      ['Entities', record.entities],
-      ['Operations', record.operations],
-      ['Compartments', record.compartments],
-    ].map(([label, value]) => ({
-      label: String(label),
-      value: Array.isArray(value) ? String(value.length) : '0',
-    })),
-    statusLabel: 'Live',
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 export default App
