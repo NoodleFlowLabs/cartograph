@@ -1,5 +1,12 @@
 import type { JsonObject, TabId } from '../../types'
-import { arr, sidebarKeys, itemId, itemMeta, itemTitle, searchableText } from '../../lib/cartograph'
+import {
+  arr,
+  sidebarKeys,
+  itemId,
+  itemMeta,
+  itemTitle,
+  searchableText,
+} from '../../lib/cartograph'
 import { EmptyState } from '../common'
 
 export function Sidebar({
@@ -20,20 +27,40 @@ export function Sidebar({
   const key = sidebarKeys[activeTab]
   const items = key ? arr(data, key) : []
   const query = search.trim().toLowerCase()
-  const filtered = items.filter((item) => searchableText(item).includes(query))
+  const indexedItems = items.map((item, index) => ({
+    id: itemId(item, index),
+    item,
+  }))
+  const filtered = indexedItems.filter(({ item }) =>
+    searchableText(item).includes(query),
+  )
+
+  function handleSearchChange(value: string) {
+    setSearch(value)
+    const nextQuery = value.trim().toLowerCase()
+    const nextItems = indexedItems.filter(({ item }) =>
+      searchableText(item).includes(nextQuery),
+    )
+
+    if (
+      nextItems.length &&
+      (!selectedId || !nextItems.some(({ id }) => id === selectedId))
+    ) {
+      setSelectedId(nextItems[0].id)
+    }
+  }
 
   return (
     <aside className="sidebar">
       <div className="sidebar-search">
         <input
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => handleSearchChange(event.target.value)}
           placeholder="Search..."
           value={search}
         />
       </div>
       <div className="sidebar-list">
-        {filtered.map((item, index) => {
-          const id = itemId(item, index)
+        {filtered.map(({ id, item }, index) => {
           return (
             <button
               className={`sidebar-item ${selectedId === id || (!selectedId && index === 0) ? 'active' : ''}`}
