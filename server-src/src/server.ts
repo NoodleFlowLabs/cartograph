@@ -129,12 +129,14 @@ app.post('/api/invariants/save', async (c) => {
   return c.json({ ok: true })
 })
 
-app.use('/assets/*', serveStatic({ root: uiRoot }))
 app.use('/favicon.svg', serveStatic({ root: uiRoot }))
-// TODO: Consider replacing the explicit root asset routes with a broader
-// static-file handler if the UI ships more Vite public assets.
 app.use('/icons.svg', serveStatic({ root: uiRoot }))
 app.use('/cartograph-logo.svg', serveStatic({ root: uiRoot }))
+app.use('/styles.css', serveStatic({ root: uiRoot }))
+app.use('/app.js', serveStatic({ root: uiRoot }))
+app.use('/components/*', serveStatic({ root: uiRoot }))
+app.use('/lib/*', serveStatic({ root: uiRoot }))
+app.use('/vendor/*', serveStatic({ root: uiRoot }))
 app.get('*', async (c) =>
   c.html(await readFile(path.join(uiRoot, 'index.html'), 'utf8')),
 )
