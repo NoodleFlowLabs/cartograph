@@ -804,6 +804,7 @@ function EntityPanel({
   setSelectedId: (id: string) => void
 }) {
   const entities = arr(data, 'entities')
+  const renderedEntities = entities.slice(0, 32)
   const relationships = arr(data, 'relationships').filter(
     (relationship) =>
       text(relationship, 'from') === itemId(entity) ||
@@ -813,12 +814,12 @@ function EntityPanel({
   return (
     <div className="split-panel">
       <div className="graph-panel">
-        {entities.slice(0, 32).map((item, index) => (
+        {renderedEntities.map((item, index) => (
           <button
             className={`entity-node ${itemId(item) === itemId(entity) ? 'active' : ''}`}
             key={itemId(item, index)}
             onClick={() => setSelectedId(itemId(item, index))}
-            style={nodeStyle(index, entities.length)}
+            style={nodeStyle(index, renderedEntities.length)}
             type="button"
           >
             <span>{text(item, 'name')}</span>
