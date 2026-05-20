@@ -6,7 +6,7 @@ description: >
   entry points (pages/routes); features are standalone capabilities embedded across
   surfaces (e.g., "Prompt Wizard", "Star Credits", "Content Unlock"); compartments are
   logical groupings of related code files that bridge product concepts to the underlying
-  codebase. Produces a JSON file and an interactive HTML visualizer. Use when the user
+  codebase. Produces a JSON file and an interactive local UI. Use when the user
   wants to understand a codebase, map its structure, see what entities exist, understand
   data flows, examine code organization, or get a high-level overview of what an app does.
   Triggers on: "map this codebase", "what does this app do", "show me the entities",
@@ -473,7 +473,7 @@ Run this yourself (no agent needed). Merge all agent outputs into the final JSON
 6. If Agent 11 returned a non-null result, include `"invariants": <agent-11-result>` in the final JSON. If Agent 11 returned `null` (no definitions file), omit the `invariants` key entirely.
 7. Assemble the final JSON following the schema in `references/json-schema.md`
 8. Write `cartograph.json` to the repo root
-9. Tell the user: "Open the visualizer (`assets/visualizer.html` in this skill's directory) in your browser and load `cartograph.json` via the file picker." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
+9. Tell the user: "Start the Cartograph UI from your project root with `node skills/cartograph/server.mjs`." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
 
 ## Important
 
