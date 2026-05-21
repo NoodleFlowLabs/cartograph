@@ -169,15 +169,23 @@ The active review agent for this project is **Codex** — the agent-specific bin
 
 Submit the stack via Graphite — one PR per branch, each opened as **ready for review** (not draft). Only fall back to draft if the user explicitly asks, or if something genuinely blocks the PR from being reviewable (e.g. a known-broken intermediate state the user wants to share for context). PR creation auto-triggers a review on each new PR.
 
-For **each PR** (bottom-up), run this loop until either the review agent returns no actionable findings **or** the user gives a merge signal (Step 7) — whichever comes first:
+For the submitted PRs, run this loop until the watched PR set is review-complete **or** the user gives a merge signal (Step 7) — whichever comes first. If watching more than one PR, the watcher only stops when **every** watched PR satisfies a completion condition.
 
-1. **Wait for the review** to post. Latency is agent-specific — for Codex, ~6–7 min is typical. If the harness exposes a periodic-watcher mechanism (recurring scheduled check, polling loop, cron-style wake), set one up to fetch the PR's comments at that cadence and surface anything new from the review agent or from a user PR review/approval (Step 7). Otherwise fall back to a single delayed wake (e.g. `ScheduleWakeup` at ~400s, kept under the prompt-cache TTL) and re-arm after each fetch. The watcher should also catch a user `APPROVED` review submitted at any time, so the agent reacts to a merge signal without the user having to repeat it in chat.
+1. **Wait for the review** to post. Latency is agent-specific — for Codex, ~6–7 min is typical. If the harness exposes a periodic-watcher mechanism (recurring scheduled check, polling loop, cron-style wake), set one up to fetch the PR's comments at that cadence and surface anything new from the review agent or from a user PR review/approval (Step 7). Otherwise fall back to a single delayed wake (e.g. `ScheduleWakeup` at ~400s, kept under the prompt-cache TTL) and re-arm after each fetch. The watcher should also catch a user `APPROVED` review while it is active, so the agent reacts to a merge signal without the user having to repeat it in chat.
 
-   **Watcher lifecycle:** create the watcher once, when the stack is first submitted in Step 6. Keep it running across all PRs and rounds. **Tear it down** as soon as the loop terminates — i.e. when every PR in the stack is clean (no open findings + 👍 from the review agent or user approval) **or** the user has given a merge signal (Step 7), and the agent is moving on to merge / cleanup. Also tear it down on any abnormal exit (user cancels, error path) so it doesn't keep firing in the background.
+   **Watcher lifecycle:** create the watcher once, when the stack is first submitted in Step 6. Keep it running across all watched PRs and review rounds, but do not leave it alive after the review work is done. On every tick, classify each watched PR as `active` or `complete`; **tear down the watcher immediately** once all watched PRs are `complete`, once the user gives a merge signal (Step 7), or on any abnormal exit (user cancels, error path) so it does not keep firing in the background.
+
+   A watched PR is `complete` when any of these conditions holds:
+   - The PR is already merged or closed.
+   - The review agent has returned a clean bill of health for the PR, and there are no unresolved review-agent findings from earlier rounds.
+   - The latest review round produced no new actionable findings, all prior findings classified as Fix have landed and been pushed, and all prior findings classified as Skip have been reported once with reasons.
+   - The user has explicitly approved/merged the PR or stack, so unresolved review-agent findings no longer block moving to Step 7.
+
+   A watched PR remains `active` when it is still awaiting its first review, awaiting a re-review after pushed fixes, has any Fix finding not yet committed and pushed, or has newly discovered findings that have not yet been triaged and reported. If the watcher is monitoring multiple PRs, evaluate these conditions per PR and only stop when all of them are `complete`. Do not keep the watcher running solely to wait for a future merge approval after every PR is review-complete; report the clean review state and wait for the Step 7 merge gate in the normal conversation.
 
 2. **Fetch comments and PR-description reactions**:
    ```bash
-   gh pr view <num> --json comments,reviews
+   gh pr view <num> --json comments,reviews,state,mergedAt
    gh api repos/{owner}/{repo}/pulls/<num>/comments --paginate
    gh api repos/{owner}/{repo}/issues/<num>/reactions    # reactions on the PR body itself
    ```
@@ -192,7 +200,7 @@ For **each PR** (bottom-up), run this loop until either the review agent returns
 
 5. **Triage autonomously and report — no user gate.** The agent decides Fix vs. Skip on each finding itself and proceeds to fix the valid ones (point 6) without waiting for confirmation. A status message is still posted so the user has visibility and can interject if they disagree. Format:
    - **Context header** at the very top: ticket id + title, a one-line summary of what this stack is shipping, and a compact list of the PRs (slug + URL). The user shouldn't need to open anything to recall the scope.
-   - **Per-PR review status**: for each PR, one of `clean` (review agent reacted 👍 on the PR body), `findings: N` (with N findings to address this round), `awaiting review`, or `re-review pending` (after a retrigger).
+   - **Per-PR review status**: for each PR, one of `complete` (merged/closed or review-complete by the watcher lifecycle rules), `clean` (review agent reacted 👍 on the PR body), `findings: N` (with N findings to address this round), `awaiting review`, or `re-review pending` (after a retrigger).
    - **Findings this round** with the agent's autonomous Fix/Skip decision + one-line reason + source link. New-this-round and carried-over both shown for clarity. Skip findings appear once and are not carried forward.
    - **Next action**: "fixing the N valid findings now and retriggering review" (or "no actionable findings — waiting for next watcher tick").
 
