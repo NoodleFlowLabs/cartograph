@@ -3050,6 +3050,7 @@ app.post("/api/invariants/save", async (c) => {
 app.use("/favicon.svg", serveStatic({ root: uiRoot }));
 app.use("/icons.svg", serveStatic({ root: uiRoot }));
 app.use("/cartograph-logo.svg", serveStatic({ root: uiRoot }));
+app.use("/assets/*", async (c) => c.text("stale Cartograph UI asset", 404));
 app.use("/styles.css", serveStatic({ root: uiRoot }));
 app.use("/app.js", serveStatic({ root: uiRoot }));
 app.use("/components/*", serveStatic({ root: uiRoot }));
