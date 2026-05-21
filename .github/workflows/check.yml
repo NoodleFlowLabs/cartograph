@@ -33,3 +33,11 @@ jobs:
 
       - name: Build server artifact
         run: pnpm build:server
+
+      - name: Verify server artifact is current
+        run: |
+          if [ -n "$(git status --porcelain -- skills/cartograph/server.mjs)" ]; then
+            git status --short -- skills/cartograph/server.mjs
+            git diff -- skills/cartograph/server.mjs
+            exit 1
+          fi
