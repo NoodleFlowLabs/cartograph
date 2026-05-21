@@ -3047,7 +3047,7 @@ app.post("/api/invariants/save", async (c) => {
   await atomicWrite(resolveInProjectRoot(INVARIANTS_MD), body.contents);
   return c.json({ ok: true });
 });
-app.use("/*", serveStatic({ root: uiRoot }));
+app.on(["GET", "HEAD"], "/*", serveStatic({ root: uiRoot }));
 app.get(
   "*",
   async (c) => c.html(await readFile(path.join(uiRoot, "index.html"), "utf8"))
