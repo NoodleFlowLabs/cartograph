@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm --filter @cartograph/server build",
     "build:server": "pnpm --filter @cartograph/server build",
-    "check": "pnpm --filter @cartograph/server check"
+    "check": "pnpm --filter @cartograph/server check && pnpm check:ui",
+    "check:ui": "node --check skills/cartograph/ui/app.js && for f in skills/cartograph/ui/components/*.js skills/cartograph/ui/lib/*.js; do node --check \"$f\"; done"
   }
 }
