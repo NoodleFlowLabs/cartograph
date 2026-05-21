@@ -134,7 +134,7 @@ Start the bundled local UI from your project root:
 node skills/cartograph/server.mjs
 ```
 
-The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map. The UI is served directly from readable source files in `skills/cartograph/ui`; there is no frontend build step or committed generated bundle.
+The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map. The UI is served directly from readable source files in `skills/cartograph/ui`; there is no frontend build step or committed generated app bundle.
 
 ### 4. Iterate
 

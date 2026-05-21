@@ -17,4 +17,4 @@ Development flow:
 3. Open the printed local URL.
 4. Refresh the browser after UI source changes.
 
-The UI has no Vite dev server, frontend build step, CDN dependency, or committed generated bundle.
+The UI has no Vite dev server, frontend build step, CDN dependency, or committed generated app bundle. The small htm/Preact runtime is vendored under `vendor/` so the skill works offline.
