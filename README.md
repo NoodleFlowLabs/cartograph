@@ -134,7 +134,10 @@ Start the bundled local UI from your project root:
 node skills/cartograph/server.mjs
 ```
 
-The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map.
+The server binds to `127.0.0.1`, opens the UI in your browser, watches
+`cartograph.json`, and refreshes when `/cartograph` writes a new map. The UI
+source lives directly under `skills/cartograph/ui`; edit those browser-native
+modules, refresh the browser, and skip any Vite or UI build step.
 
 ### 4. Iterate
 
