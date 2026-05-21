@@ -1,0 +1,49 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check source
+        run: pnpm check
+
+      - name: Build server artifact
+        run: pnpm build
+
+      - name: Check browser modules
+        run: find skills/cartograph/ui -name '*.js' -print -exec node --check {} \;
+
+      - name: Verify server artifact is current
+        run: |
+          if [ -n "$(git status --porcelain -- skills/cartograph/server.mjs)" ]; then
+            git status --short -- skills/cartograph/server.mjs
+            git diff -- skills/cartograph/server.mjs
+            exit 1
+          fi
