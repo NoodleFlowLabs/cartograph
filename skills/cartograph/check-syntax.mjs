@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const uiRoot = fileURLToPath(new URL('./', import.meta.url))
+const uiRoot = fileURLToPath(new URL('./ui/', import.meta.url))
 const checked = []
 
 await checkDir(uiRoot)
