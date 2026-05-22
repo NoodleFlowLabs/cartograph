@@ -61,7 +61,7 @@ export function Welcome({
           Drop <code>cartograph.json</code> here
         </div>
         <div className="drop-zone-sub">
-          Or use the local server with <code>node skills/cartograph/server.mjs</code>
+          Or use the local server with <code>npm --prefix skills/cartograph start</code>
         </div>
         <label className="drop-zone-btn">
           Browse files
