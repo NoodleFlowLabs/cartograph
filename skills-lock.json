@@ -7,6 +7,18 @@
       "skillPath": "skills/deslop/SKILL.md",
       "computedHash": "596725ad1a4dc634b621df242f6a3b16d0ed703b244c1bc90a407f6375644b03"
     },
+    "draft-brief": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/draft-brief/SKILL.md",
+      "computedHash": "6ec36624451e87626bf351728bd78a730d458e689628c5f0d1eecf1fe59f3a91"
+    },
+    "final-brief": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/final-brief/SKILL.md",
+      "computedHash": "e2d4d898adb67c1b536f77b8c67488252ee22474f1051a91266f447a8bae5a9b"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
