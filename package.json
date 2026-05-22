@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm --filter @cartograph/ui build",
     "build:ui": "pnpm --filter @cartograph/ui build",
-    "check": "pnpm --filter @cartograph/ui lint && pnpm --filter @cartograph/ui typecheck",
+    "check": "pnpm --filter @cartograph/ui lint && pnpm --filter @cartograph/ui typecheck && npm --prefix skills/cartograph run check",
     "dev:ui": "pnpm --filter @cartograph/ui dev"
   }
 }
