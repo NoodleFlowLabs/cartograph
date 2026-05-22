@@ -140,6 +140,7 @@ app.post('/api/invariants/save', async (c) => {
 })
 
 app.get('/vendor/*', (c) => serveVendorFile(c))
+app.get('/assets/*', (c) => serveUiFile(c))
 app.get('/src/*', (c) => serveUiFile(c))
 app.get('/styles/*', (c) => serveUiFile(c))
 app.get('/favicon.svg', (c) => serveUiFile(c))
