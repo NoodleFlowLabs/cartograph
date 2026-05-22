@@ -2,7 +2,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const uiRoot = fileURLToPath(new URL('./', import.meta.url))
+const uiRoot = fileURLToPath(new URL('./ui/', import.meta.url))
 const offenders = []
 
 await scan(uiRoot)
