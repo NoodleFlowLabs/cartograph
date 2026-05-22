@@ -59,19 +59,18 @@ For each individual change produce one row: the table/model, the exact field, ol
 
 Write one self-contained `.html` file — all CSS inline in a `<style>` block, no external requests, no JS frameworks. It must open straight from disk.
 
-**Layout** — think dashboard or poster, not document. Use a dense, multi-column grid that fills the width of a desktop viewport. The first screenful (~1440×900) must be self-sufficient: a reviewer who reads only the top of the page should still come away knowing the riskiest things in the change. Keep the whole page tight — a reviewer should not have to scroll far. Cut padding and filler before you cut content.
+**Aim for the goal, not a fixed layout.** A reviewer should be able to grasp the riskiest parts of the change from the top of the page within roughly half a minute, and read the whole brief without much scrolling. Beyond that, the visual design is yours — pick a structure that serves *this* change. A schema-heavy change wants a different shape than a UI refactor; a 2-PR stack wants different framing than a 6-PR one. Don't force a one-size-fits-all template.
 
-**Sections, in this order:**
+**Content worth considering** (use what's relevant to this change, skip what isn't, in whatever order best serves the reader):
 
-1. **Header bar** — branch name, trunk it's based on, change counts (N files, +X/−Y lines, N commits), generated timestamp.
-2. **TL;DR** — 2–3 plain-language sentences: what this change does and why. Someone who reads only this should get the gist. Make it visually prominent.
-3. **Watch items** — a can't-miss panel of Tier 1 callouts: new endpoints, auth changes, schema changes, new deps, config changes. Color-code by severity. If there are none, say so.
-4. **Proposed PR stack** _(only if one exists — otherwise omit)_ — a vertical stack visual, bottom→top, one card per PR: slug, one-line summary, size, key files. This shows the reviewer how the work is sliced.
-5. **Schema changes — line by line** _(only if schema changed)_ — the per-change table from Step 3.
-6. **Changes by area** — Tier 2 then Tier 3, grouped by feature/area, each with a short description and the files touched.
-7. **File index** — compact full file list with per-file +/− counts, if there's room.
+- **What the reader needs up front** — branch, trunk it's based on, change counts (files, +/−, commits), a generated timestamp, and a short narrative TL;DR of what the change does and why.
+- **High-stakes callouts** — new/changed endpoints, auth and access control, schema changes, new dependencies, config/env changes, anything destructive. These should be visually unmissable.
+- **Proposed PR stack** — if one exists, show how the work is sliced: per-PR slug, one-line summary, size, key files.
+- **Schema changes line by line** — if the schema changed, the per-change walkthrough from Step 3.
+- **The rest of the changes**, grouped by area or feature, with short descriptions and the files touched.
+- **A compact file index**, if there's room and it adds value.
 
-**Visual craft** — this is a thing a manager looks at, so it should look considered: clear type hierarchy, generous use of color to encode priority (red/amber for high-stakes, neutral for routine), monospace for code/paths/identifiers, real whitespace rhythm. Avoid a generic AI-generated look — make it feel like a deliberate internal dashboard. If a `frontend-design` skill is available, lean on its principles.
+**Visual craft** — this lands in front of a manager, so it should look deliberate, not generic: clear type hierarchy, color used purposefully (especially to signal priority/severity), monospace for code and paths, real whitespace rhythm. Avoid the generic AI-generated look. If a `frontend-design` skill is available, lean on its principles.
 
 ## Step 5 — Save, open, and self-check
 

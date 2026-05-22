@@ -82,20 +82,19 @@ Present this per PR: the initial commit as a baseline, then a chronological list
 
 Write one self-contained `.html` file — all CSS inline in a `<style>` block, no external requests, no JS frameworks. It must open straight from disk.
 
-**Layout** — dashboard/poster, not document. Dense multi-column grid filling a desktop viewport. The first screenful (~1440×900) must be self-sufficient: a reviewer who reads only the top should know the high-stakes surface area and that review passed. Keep the whole page tight — cut padding and filler before content.
+**Aim for the goal, not a fixed layout.** A reviewer should be able to grasp the high-stakes surface area and the review outcome from the top of the page within roughly half a minute, and read the whole brief without much scrolling. Beyond that, the visual design is yours — pick a structure that serves *this* particular work. A small bugfix wants a very different shape from a multi-PR feature with heavy review activity. Don't force a one-size-fits-all template.
 
-**Sections, in this order:**
+**Content worth considering** (use what's relevant to this work, skip what isn't, in whatever order best serves the reader):
 
-1. **Header bar** — branch/stack name, trunk, change counts (N files, +X/−Y, N commits), review status (e.g. "review clean" / "N findings, all addressed"), generated timestamp.
-2. **TL;DR** — 2–3 plain-language sentences: what shipped and why. Visually prominent.
-3. **Watch items** — can't-miss panel of Tier 1 callouts in final form: endpoints, auth, schema, deps, config. Color-coded by severity.
-4. **PR stack** *(only if a stack exists — otherwise omit)* — one card per PR: slug, summary, status (open/merged), size.
-5. **Schema changes — line by line** *(only if schema changed)* — the per-change table from Step 3.
-6. **Code walkthrough** — the important-functions explainer from Step 4, grouped by area, high-stakes first.
-7. **PR evolution** *(only if any PR has follow-up commits — otherwise omit)* — the per-PR commit timeline from Step 5: initial commit, then each follow-up tagged by cause (review finding / user steering / other), plus any skipped review findings.
-8. **File index** — compact full file list with per-file +/− counts, if there's room.
+- **What the reader needs up front** — branch/stack, trunk, change counts, review status (e.g. "review clean" / "N findings, all addressed"), a generated timestamp, and a short narrative TL;DR of what shipped and why.
+- **High-stakes callouts in their final form** — endpoints, auth, schema, deps, config, anything destructive. Make these visually unmissable.
+- **PR stack** — if a stack exists, one entry per PR with slug, summary, status (open/merged), size.
+- **Schema changes line by line** — if the schema changed, the per-change walkthrough from Step 3.
+- **Code walkthrough** — the guided tour of the important functions from Step 4, grouped in whatever way best helps the reader build a mental model.
+- **PR evolution** — if any PR has follow-up commits, the per-PR commit timeline from Step 5 (initial commit, then each follow-up tagged by cause: review finding / user steering / other), plus any skipped review findings.
+- **A compact file index**, if there's room and it adds value.
 
-**Visual craft** — a manager looks at this, so make it look deliberate: clear type hierarchy, color to encode priority (red/amber for high-stakes, green for review-clean, neutral for routine), monospace for code/paths/identifiers, real whitespace rhythm. Avoid a generic AI-generated look. If a `frontend-design` skill is available, lean on its principles.
+**Visual craft** — this lands in front of a manager, so it should look deliberate, not generic: clear type hierarchy, color used purposefully (priority, severity, review state), monospace for code and paths, real whitespace rhythm. Avoid the generic AI-generated look. If a `frontend-design` skill is available, lean on its principles.
 
 ## Step 7 — Save, open, and self-check
 

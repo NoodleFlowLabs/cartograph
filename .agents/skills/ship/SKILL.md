@@ -39,9 +39,10 @@ Copy this into the response and tick as work progresses:
 - [ ] 4. Worktree + branch
 - [ ] 5a. Implement end-to-end on the working branch (no stack yet)
 - [ ] 5b. Deslop the working tree
-- [ ] 5c. Review the full diff; propose stack breakup — approved
+- [ ] 5c. Review the full diff; generate the draft-brief; propose stack breakup — approved
 - [ ] 5d. Split the implemented changes into the Graphite stack
 - [ ] 6. Submit stack; review loop per PR until clean or user-approved
+- [ ] 6e. Review complete → generate the final-brief
 - [ ] 7. User merge signal → generate migrations; merge bottom-up
 - [ ] 8. Linear → Done; clean up worktree; report
 ```
@@ -150,6 +151,10 @@ Inspect the working-tree diff against `main` (e.g. `git diff main --stat`, then 
 4. `<agent>/feed-pagination-ui` (medium) — wire infinite scroll + tests. Files: `app/feed/feed.tsx`, `__tests__/feed.test.tsx`.
 ```
 
+**Generate the visual brief for the gate.** Before asking for approval, invoke the `draft-brief` skill if it's installed. It reads the working-tree diff and the stack proposal above (already in context) and produces a visual HTML one-pager — high-stakes changes (new endpoints, auth, schema) first, schema walked line by line — that a busy reviewer can approve from quickly.
+
+Always include the full stack proposal as text in the response itself, whether or not the brief was generated — the brief is a supplement, not a replacement. The user should be able to read the proposed stack inline without opening the brief. When `draft-brief` is installed, also give them the brief's path. Either way, the approval gate stands.
+
 Wait for explicit approval. The user may split, merge, or reorder — adjust and re-show. No splitting begins until approved.
 
 ### 5d. Split the implementation into the Graphite stack
@@ -169,23 +174,27 @@ The active review agent for this project is **Codex** — the agent-specific bin
 
 Submit the stack via Graphite — one PR per branch, each opened as **ready for review** (not draft). Only fall back to draft if the user explicitly asks, or if something genuinely blocks the PR from being reviewable (e.g. a known-broken intermediate state the user wants to share for context). PR creation auto-triggers a review on each new PR.
 
-For the submitted PRs, run this loop until the watched PR set is review-complete **or** the user gives a merge signal (Step 7) — whichever comes first. If watching more than one PR, the watcher only stops when **every** watched PR satisfies a completion condition.
+For **each PR** (bottom-up), run this loop until either the review agent returns no actionable findings **or** the user gives a merge signal (Step 7) — whichever comes first:
 
-1. **Wait for the review** to post. Latency is agent-specific — for Codex, ~6–7 min is typical. If the harness exposes a periodic-watcher mechanism (recurring scheduled check, polling loop, cron-style wake), set one up to fetch the PR's comments at that cadence and surface anything new from the review agent or from a user PR review/approval (Step 7). Otherwise fall back to a single delayed wake (e.g. `ScheduleWakeup` at ~400s, kept under the prompt-cache TTL) and re-arm after each fetch. The watcher should also catch a user `APPROVED` review while it is active, so the agent reacts to a merge signal without the user having to repeat it in chat.
+1. **Wait for the review** to post. Latency is agent-specific — for Codex, ~6–7 min is typical. If the harness exposes a periodic-watcher mechanism (recurring scheduled check, polling loop, cron-style wake), set one up to fetch the PR's comments at that cadence and surface anything new from the review agent. Otherwise fall back to a single delayed wake (e.g. `ScheduleWakeup` at ~400s, kept under the prompt-cache TTL) and re-arm after each fetch.
 
-   **Watcher lifecycle:** create the watcher once, when the stack is first submitted in Step 6. Keep it running across all watched PRs and review rounds, but do not leave it alive after the review work is done. On every tick, classify each watched PR as `active` or `complete`; **tear down the watcher immediately** once all watched PRs are `complete`, once the user gives a merge signal (Step 7), or on any abnormal exit (user cancels, error path) so it does not keep firing in the background.
+   **Watcher lifecycle:** the watcher exists **only to catch review findings** — it is not responsible for waiting on the user's merge approval. Create it once when the stack is first submitted, and keep it running across all PRs and rounds while findings work is outstanding.
 
-   A watched PR is `complete` when any of these conditions holds:
-   - The PR is already merged or closed.
-   - The review agent has returned a clean bill of health for the PR, and there are no unresolved review-agent findings from earlier rounds.
-   - The latest review round produced no new actionable findings, all prior findings classified as Fix have landed and been pushed, and all prior findings classified as Skip have been reported once with reasons.
-   - The user has explicitly approved/merged the PR or stack, so unresolved review-agent findings no longer block moving to Step 7.
+   **Per-PR review-complete condition.** A PR's review is complete for the watcher's purposes when any of:
+   - It has been merged (no longer in the open set), or
+   - It is clean: review agent has reacted 👍 on the PR body **and** every finding raised so far has been resolved (fixed and pushed, or explicitly skipped), with no new findings on the most recent re-review.
 
-   A watched PR remains `active` when it is still awaiting its first review, awaiting a re-review after pushed fixes, has any Fix finding not yet committed and pushed, or has newly discovered findings that have not yet been triaged and reported. If the watcher is monitoring multiple PRs, evaluate these conditions per PR and only stop when all of them are `complete`. Do not keep the watcher running solely to wait for a future merge approval after every PR is review-complete; report the clean review state and wait for the Step 7 merge gate in the normal conversation.
+   **Tear down the watcher** when **all** PRs in its scope are review-complete (the condition must hold across every PR being watched — not just one). Whenever a single PR becomes review-complete, narrow the watcher's scope to drop that PR but keep watching the rest; stop the watcher entirely once nothing is left to watch. **Don't keep the watcher alive just to wait for the user's merge approval** — once findings are done, stop it, report that review is complete, and leave the merge (Step 7) for the user to trigger on their own time.
+
+   Also tear it down immediately if:
+   - The user gives an early merge signal in chat — the merge step takes over.
+   - The workflow exits abnormally (user cancels, error path) — so the watcher doesn't keep firing in the background.
+
+   Never leave a watcher running after review is complete or the workflow has moved on to merge/cleanup.
 
 2. **Fetch comments and PR-description reactions**:
    ```bash
-   gh pr view <num> --json comments,reviews,state,mergedAt
+   gh pr view <num> --json comments,reviews
    gh api repos/{owner}/{repo}/pulls/<num>/comments --paginate
    gh api repos/{owner}/{repo}/issues/<num>/reactions    # reactions on the PR body itself
    ```
@@ -200,7 +209,7 @@ For the submitted PRs, run this loop until the watched PR set is review-complete
 
 5. **Triage autonomously and report — no user gate.** The agent decides Fix vs. Skip on each finding itself and proceeds to fix the valid ones (point 6) without waiting for confirmation. A status message is still posted so the user has visibility and can interject if they disagree. Format:
    - **Context header** at the very top: ticket id + title, a one-line summary of what this stack is shipping, and a compact list of the PRs (slug + URL). The user shouldn't need to open anything to recall the scope.
-   - **Per-PR review status**: for each PR, one of `complete` (merged/closed or review-complete by the watcher lifecycle rules), `clean` (review agent reacted 👍 on the PR body), `findings: N` (with N findings to address this round), `awaiting review`, or `re-review pending` (after a retrigger).
+   - **Per-PR review status**: for each PR, one of `clean` (review agent reacted 👍 on the PR body), `findings: N` (with N findings to address this round), `awaiting review`, or `re-review pending` (after a retrigger).
    - **Findings this round** with the agent's autonomous Fix/Skip decision + one-line reason + source link. New-this-round and carried-over both shown for clarity. Skip findings appear once and are not carried forward.
    - **Next action**: "fixing the N valid findings now and retriggering review" (or "no actionable findings — waiting for next watcher tick").
 
@@ -214,6 +223,10 @@ For the submitted PRs, run this loop until the watched PR set is review-complete
 
 If a finding spans multiple PRs, fix on the lowest PR that owns the code so children inherit it when the stack is restacked and resubmitted.
 
+### 6e. Review complete — generate the final brief
+
+Once every watched PR is review-complete and the watcher has been torn down (see the watcher lifecycle above), and the user has not already given a merge signal, invoke the `final-brief` skill if it's installed. It reads the final commit history, the cumulative diff against `main`, and the review threads, and produces a visual HTML one-pager — final code state with high-stakes surface area first, a walkthrough of the key functions, and a map of which commits addressed which review findings — for the user's pre-merge pass. Give the user the brief's path, then wait at the Step 7 merge gate. If the user already gave a merge signal, skip straight to Step 7. If `final-brief` isn't installed, skip this step.
+
 ## Step 7 — Merge (gate)
 
 Merge-ready when the user gives an explicit merge signal — either:
@@ -225,7 +238,7 @@ Merge-ready when the user gives an explicit merge signal — either:
   gh pr view <num> --json reviews \
     --jq ".reviews[] | select(.author.login == \"$USER\" and .state == \"APPROVED\")"
   ```
-  Poll the stack's PRs alongside review-agent comments in Step 6.
+  The agent doesn't continuously poll for this — once review is complete and the watcher has stopped (Step 6), it reports that the stack is ready and waits. Check for a GitHub approval when the user next engages, or act on a chat merge signal directly.
 
 The user signal is sufficient on its own — unresolved review-agent findings do not block merge once the user has explicitly approved (the user has seen them and chosen to ship anyway). A clean review without an explicit user signal is **not** enough.
 
