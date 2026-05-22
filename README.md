@@ -131,10 +131,11 @@ Works in Claude Code, Codex, or any agent that supports skills. This scans your 
 Start the bundled local UI from your project root:
 
 ```bash
-node skills/cartograph/server.mjs
+npm --prefix skills/cartograph install
+npm --prefix skills/cartograph start
 ```
 
-The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map.
+The install is a one-time setup for the skill-local runtime dependencies. The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map.
 
 ### 4. Iterate
 
