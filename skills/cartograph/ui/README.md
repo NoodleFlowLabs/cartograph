@@ -1,12 +1,17 @@
 # Cartograph UI Runtime
 
-This directory is generated from the repo-root `ui` workspace.
+This UI is browser-native source served directly by `skills/cartograph/server.mjs`.
 
-Run this from the project root:
+Run the one-time dependency install from a checkout that contains the skill:
 
 ```bash
 npm --prefix skills/cartograph install
+```
+
+Then start the local UI:
+
+```bash
 npm --prefix skills/cartograph start
 ```
 
-The install step prepares the skill-local runtime dependencies. The server binds to `127.0.0.1`, serves the bundled React UI, and exposes purpose-built Cartograph file endpoints.
+The server binds to `127.0.0.1`, serves local npm-managed runtime modules, and exposes purpose-built Cartograph file endpoints. Edit files under this directory and refresh the browser; there is no Vite build and no generated UI artifact to commit.

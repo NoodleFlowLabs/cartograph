@@ -135,7 +135,7 @@ npm --prefix skills/cartograph install
 npm --prefix skills/cartograph start
 ```
 
-The install is a one-time setup for the skill-local runtime dependencies. The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map.
+The install is a one-time setup for the skill-local runtime dependencies. The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map. The UI and server are maintained as source under `skills/cartograph`; there is no Vite build or generated server bundle to commit.
 
 ### 4. Iterate
 
