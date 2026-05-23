@@ -2,7 +2,6 @@
   "name": "@cartograph/skill-runtime",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.10.0",
   "scripts": {
     "start": "node server.mjs",
     "check": "node --check server.mjs && node check-syntax.mjs && node check-no-cdn.mjs"

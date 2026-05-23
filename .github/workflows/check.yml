@@ -14,20 +14,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.10.0
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: skills/cartograph/app/pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: skills/cartograph/app/package-lock.json
 
       - name: Install Cartograph skill runtime
-        run: pnpm --dir skills/cartograph/app install --frozen-lockfile
+        run: npm --prefix skills/cartograph/app ci
 
       - name: Check source
-        run: pnpm --dir skills/cartograph/app run check
+        run: npm --prefix skills/cartograph/app run check
