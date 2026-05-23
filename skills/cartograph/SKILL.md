@@ -473,7 +473,7 @@ Run this yourself (no agent needed). Merge all agent outputs into the final JSON
 6. If Agent 11 returned a non-null result, include `"invariants": <agent-11-result>` in the final JSON. If Agent 11 returned `null` (no definitions file), omit the `invariants` key entirely.
 7. Assemble the final JSON following the schema in `references/json-schema.md`
 8. Write `cartograph.json` to the repo root
-9. Tell the user: "Start the Cartograph UI from your project root with `npm --prefix skills/cartograph install` once, then `npm --prefix skills/cartograph start`." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
+9. Tell the user: "Start the Cartograph UI from your project root with `npm --prefix skills/cartograph/app install` once, then `npm --prefix skills/cartograph/app start`." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
 
 ## Important
 

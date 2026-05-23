@@ -260,7 +260,7 @@ function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, onFile,
     >
       <div class="drop-zone-title">Drop <code>cartograph.json</code> here</div>
       <div class="drop-zone-sub">
-        Or use the local server with <code>npm --prefix skills/cartograph start</code>
+        Or use the local server with <code>npm --prefix skills/cartograph/app start</code>
       </div>
       <label class="drop-zone-btn">
         Browse files
