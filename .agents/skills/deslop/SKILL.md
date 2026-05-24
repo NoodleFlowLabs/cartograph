@@ -14,7 +14,7 @@ Check the diff against main and remove AI-generated slop introduced in the branc
 - **Type escape hatches** - Casts to `any` used only to bypass type issues
 - **Deep nesting** - Deeply nested code that should be simplified with early returns
 - **Single-use variables** - Variables used once immediately after declaration; inline the RHS instead
-- **React prop types** - Separate props type or interface definitions used by only one component; inline the props type directly in that component signature
+- **Single-use type definitions** - Separate type or interface definitions used in only one place (React props, function parameters, return types, etc.); inline the type directly where it's used
 - **Style drift** - Other patterns inconsistent with the file and surrounding codebase
 
 ## Guardrails
