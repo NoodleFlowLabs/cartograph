@@ -4,10 +4,9 @@
   "type": "module",
   "packageManager": "pnpm@10.10.0",
   "scripts": {
-    "build": "pnpm --filter @cartograph/server build && pnpm --filter @cartograph/ui build",
-    "build:server": "pnpm --filter @cartograph/server build",
+    "build": "pnpm --filter @cartograph/ui build",
     "build:ui": "pnpm --filter @cartograph/ui build",
-    "check": "pnpm --filter @cartograph/server check && pnpm --filter @cartograph/ui lint && pnpm --filter @cartograph/ui typecheck",
+    "check": "pnpm --filter @cartograph/ui lint && pnpm --filter @cartograph/ui typecheck && npm --prefix skills/cartograph run check",
     "dev:ui": "pnpm --filter @cartograph/ui dev"
   }
 }

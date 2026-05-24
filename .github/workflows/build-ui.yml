@@ -34,28 +34,28 @@ jobs:
       - name: Check source
         run: pnpm check
 
-      - name: Build generated skill artifacts
+      - name: Build generated UI artifacts
         run: pnpm build
 
       - name: Verify generated artifacts are current
         if: github.event_name == 'pull_request'
         run: |
-          if [ -n "$(git status --porcelain -- skills/cartograph/server.mjs skills/cartograph/ui)" ]; then
-            git status --short -- skills/cartograph/server.mjs skills/cartograph/ui
-            git diff -- skills/cartograph/server.mjs skills/cartograph/ui
+          if [ -n "$(git status --porcelain -- skills/cartograph/ui)" ]; then
+            git status --short -- skills/cartograph/ui
+            git diff -- skills/cartograph/ui
             exit 1
           fi
 
       - name: Commit rebuilt artifacts on main
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          if [ -z "$(git status --porcelain -- skills/cartograph/server.mjs skills/cartograph/ui)" ]; then
-            echo "Generated artifacts are already current."
+          if [ -z "$(git status --porcelain -- skills/cartograph/ui)" ]; then
+            echo "Generated UI artifacts are already current."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add skills/cartograph/server.mjs skills/cartograph/ui
+          git add skills/cartograph/ui
           git commit -m "Rebuild Cartograph UI artifacts"
           git push
