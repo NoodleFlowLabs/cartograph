@@ -40,8 +40,8 @@ export function Sidebar({ activeTab, data, search, selectedId, setSearch, setSel
     </div>
     <div class="sidebar-list">
       ${filtered.map(
-        ({ id, item }, index) => html`<button
-          class=${`sidebar-item ${selectedId === id || (!selectedId && index === 0) ? 'active' : ''}`}
+        ({ id, item }) => html`<button
+          class=${`sidebar-item ${selectedId === id ? 'active' : ''}`}
           key=${id}
           onClick=${() => setSelectedId(id)}
           type="button"
