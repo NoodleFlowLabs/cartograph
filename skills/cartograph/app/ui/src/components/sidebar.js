@@ -3,6 +3,8 @@ import { html } from '../lib/html.js'
 import { arr, itemId, itemMeta, itemTitle, searchableText } from '../lib/data.js'
 import { EmptyState } from './common.js'
 
+const implicitFirstSelectionTabs = new Set(['featuremap', 'datamodel', 'codeorg'])
+
 export function Sidebar({ activeTab, data, search, selectedId, setSearch, setSelectedId }) {
   const key = sidebarKeys[activeTab]
   const items = key ? arr(data, key) : []
@@ -40,8 +42,12 @@ export function Sidebar({ activeTab, data, search, selectedId, setSearch, setSel
     </div>
     <div class="sidebar-list">
       ${filtered.map(
-        ({ id, item }) => html`<button
-          class=${`sidebar-item ${selectedId === id ? 'active' : ''}`}
+        ({ id, item }, index) => html`<button
+          class=${`sidebar-item ${
+            selectedId === id || (!selectedId && implicitFirstSelectionTabs.has(activeTab) && index === 0)
+              ? 'active'
+              : ''
+          }`}
           key=${id}
           onClick=${() => setSelectedId(id)}
           type="button"
