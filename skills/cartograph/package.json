@@ -1,0 +1,15 @@
+{
+  "name": "@cartograph/skill-runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check server.mjs && node check-syntax.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "hono": "^4.10.7",
+    "htm": "^3.1.1",
+    "preact": "^10.27.2"
+  }
+}
