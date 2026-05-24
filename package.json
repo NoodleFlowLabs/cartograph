@@ -1,9 +1,0 @@
-{
-  "name": "cartograph",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "check": "npm --prefix skills/cartograph run check",
-    "start": "npm --prefix skills/cartograph start"
-  }
-}

@@ -19,10 +19,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: skills/cartograph/package-lock.json
+          cache-dependency-path: skills/cartograph/app/package-lock.json
 
       - name: Install Cartograph skill runtime
-        run: npm --prefix skills/cartograph ci
+        run: npm --prefix skills/cartograph/app ci
 
       - name: Check source
-        run: npm --prefix skills/cartograph run check
+        run: npm --prefix skills/cartograph/app run check
