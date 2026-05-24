@@ -5,10 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cartograph UI</title>
-    <script type="module" crossorigin src="/assets/index-FPVehuTv.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BbXcgSYF.css">
+    <link rel="stylesheet" href="/styles/base.css" />
+    <link rel="stylesheet" href="/styles/layout.css" />
+    <link rel="stylesheet" href="/styles/navigation.css" />
+    <link rel="stylesheet" href="/styles/content.css" />
+    <link rel="stylesheet" href="/styles/views.css" />
+    <link rel="stylesheet" href="/styles/welcome.css" />
+    <link rel="stylesheet" href="/styles/responsive.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "htm": "/vendor/htm.module.js",
+          "preact": "/vendor/preact.module.js",
+          "preact/hooks": "/vendor/preact-hooks.module.js"
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
