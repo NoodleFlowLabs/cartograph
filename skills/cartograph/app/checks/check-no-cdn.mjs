@@ -30,8 +30,8 @@ async function scan(dir) {
     }
 
     const contents = (await readFile(fullPath, 'utf8')).replace(
-      /\s+href=(["'])https?:\/\/[^"']+\1/g,
-      '',
+      /<a\b([^>]*)\s+href=(["'])https?:\/\/[^"']+\2/gi,
+      '<a$1',
     )
     if (/https?:\/\/|\/\/cdn\.|unpkg\.com|esm\.sh|jsdelivr\.net/.test(contents)) {
       offenders.push(path.relative(uiRoot, fullPath))
