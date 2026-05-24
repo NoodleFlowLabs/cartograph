@@ -2,16 +2,33 @@
   --bg: #050507;
   --surface: #0a0a0e;
   --surface-2: #111116;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-hover: rgba(255, 255, 255, 0.14);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.1);
   --text: #e8e5dd;
-  --text-muted: #9b968a;
-  --text-dim: #625f57;
+  --text-muted: #7a7872;
+  --text-dim: #5c584e;
   --accent: #c8a750;
   --accent-dim: rgba(200, 167, 80, 0.14);
   --green: #4ead7a;
+  --green-dim: rgba(78, 173, 122, 0.14);
+  --orange: #d47f4a;
+  --orange-dim: rgba(212, 127, 74, 0.14);
+  --purple: #9b6fcd;
+  --purple-dim: rgba(155, 111, 205, 0.14);
+  --pink: #d46b8a;
+  --pink-dim: rgba(212, 107, 138, 0.14);
   --yellow: #c8b44a;
+  --yellow-dim: rgba(200, 180, 74, 0.14);
   --red: #cd5c5c;
+  --red-dim: rgba(205, 92, 92, 0.14);
+  --cyan: #5b8def;
+  --cyan-dim: rgba(91, 141, 239, 0.14);
+  --pm-accent: #5b8def;
+  --pm-accent-dim: rgba(91, 141, 239, 0.14);
+  --pm-cluster-border: rgba(91, 141, 239, 0.2);
+  --eng-accent: #c8a750;
+  --eng-accent-dim: rgba(200, 167, 80, 0.14);
+  --eng-cluster-border: rgba(200, 167, 80, 0.2);
   --radius: 4px;
   --font:
     -apple-system,
