@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "advisor": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/advisor/SKILL.md",
+      "computedHash": "b068e6c507bbba0e7af6ef6e23da901744cab21298a2d3e2c67ae9abd3c89cac"
+    },
     "deslop": {
       "source": "ilamanov/skills",
       "sourceType": "github",
