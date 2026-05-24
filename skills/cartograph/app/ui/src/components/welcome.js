@@ -182,7 +182,9 @@ export function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, 
 
     <div class="welcome-footer">
       <div class="welcome-divider"></div>
-      <span class="welcome-link">Learn more at cartograph.sh -></span>
+      <a href="https://cartograph.sh" target="_blank" rel="noopener noreferrer">
+        Learn more at cartograph.sh ->
+      </a>
     </div>
   </main>`
 }

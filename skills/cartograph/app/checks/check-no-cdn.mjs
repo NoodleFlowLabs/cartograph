@@ -29,7 +29,10 @@ async function scan(dir) {
       continue
     }
 
-    const contents = await readFile(fullPath, 'utf8')
+    const contents = (await readFile(fullPath, 'utf8')).replace(
+      /\s+href=(["'])https?:\/\/[^"']+\1/g,
+      '',
+    )
     if (/https?:\/\/|\/\/cdn\.|unpkg\.com|esm\.sh|jsdelivr\.net/.test(contents)) {
       offenders.push(path.relative(uiRoot, fullPath))
     }

@@ -593,7 +593,7 @@
   background: linear-gradient(90deg, transparent, rgba(200, 167, 80, 0.15), transparent);
 }
 
-.welcome-link {
+.welcome-footer a {
   display: inline-block;
   padding: 8px 20px;
   border: 1px solid rgba(200, 167, 80, 0.25);
@@ -608,7 +608,7 @@
     background 0.15s;
 }
 
-.welcome-link:hover {
+.welcome-footer a:hover {
   border-color: rgba(200, 167, 80, 0.45);
   background: rgba(200, 167, 80, 0.06);
 }
