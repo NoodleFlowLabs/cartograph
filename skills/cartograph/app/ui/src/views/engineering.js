@@ -1,7 +1,7 @@
 import { html } from '../lib/html.js'
 import { arr, exposureLabel, featureName, findById, getInvariants, groupBy, itemId, metricState, nodeStyle, num, record, sourceLabel, strArray, text } from '../lib/data.js'
 import { buildEntityContext, buildFileTreeContext } from '../lib/prompts.js'
-import { Badge, CardSection, CopyButton, DetailHeader, EmptyState, InfoCard, PromptBlock } from '../components/common.js'
+import { Badge, CardSection, CopyButton, DetailHeader, EmptyState, InfoCard, LinkedSection, PromptBlock } from '../components/common.js'
 
 export function InvariantsPanel({ data }) {
   const invariants = getInvariants(data)
