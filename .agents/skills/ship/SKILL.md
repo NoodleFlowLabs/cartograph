@@ -21,12 +21,13 @@ If any is missing, stop and ask.
 
 The agent never advances past these without explicit user confirmation ("yes", "approved", "merge", etc.). Permission does not carry over between gates.
 
-| #   | Gate           | When                                                                    |
-| --- | -------------- | ----------------------------------------------------------------------- |
-| 1   | Task selection | Only when the ticket is ambiguous or conflicts (Step 1)                 |
-| 2   | Plan approval  | Only when the ticket asks for it (Step 2)                               |
-| 3   | Stack breakup  | Always, after implementation, before splitting into the stack (Step 5c) |
-| 4   | Merge          | Always, before merging any PR in the stack                              |
+| #   | Gate                 | When                                                                                |
+| --- | -------------------- | ----------------------------------------------------------------------------------- |
+| 1   | Task selection       | Only when the ticket is ambiguous or conflicts (Step 1)                             |
+| 2   | Plan approval        | Only when the ticket asks for it (Step 2)                                           |
+| 3   | Missing dependencies | Only when the ticket requires deps/services not already set up in the repo (Step 2) |
+| 4   | Stack breakup        | Only when the work is complex or the ticket was ambiguous (Step 5c)                 |
+| 5   | Merge                | Always, before merging any PR in the stack                                          |
 
 ## Progress checklist
 
@@ -35,11 +36,12 @@ Copy this into the response and tick as work progresses:
 ```
 - [ ] 1. Select ticket
 - [ ] 2. Read ticket; decide plan-first vs. straight-to-implement
+- [ ] 2b. Verify required dependencies are present — flag any missing (gate)
 - [ ] 3. Plan (if required) — approved
 - [ ] 4. Worktree + branch
 - [ ] 5a. Implement end-to-end on the working branch (no stack yet)
 - [ ] 5b. Deslop the working tree
-- [ ] 5c. Review the full diff; generate the draft-brief; propose stack breakup — approved
+- [ ] 5c. Review the full diff; decide whether to gate; if gating, generate draft-brief + propose stack breakup — approved
 - [ ] 5d. Split the implemented changes into the Graphite stack
 - [ ] 6. Submit stack; review loop per PR until clean or user-approved
 - [ ] 6e. Review complete → generate the final-brief
@@ -104,6 +106,24 @@ Read description, comments, attachments, status.
 
 Apply the Step 2 status transition (see table above).
 
+## Step 2b — Verify required dependencies (gate)
+
+Before any implementation (and before Step 3 if planning), enumerate the **external dependencies and one-time setup** the ticket requires: SDKs / npm packages, framework primitives that need installation (e.g. cron, queues, workflows, auth providers), managed services that need provisioning (databases, vector stores, third-party APIs), environment variables, and infra config (e.g. `vercel.ts`, `vercel.json` entries, cron schedules).
+
+For each, check whether it's **already present** in the repo:
+
+- Package installed in `package.json` / lockfile?
+- Setup files in place (e.g. cron defined in `vercel.ts`/`vercel.json`, workflow runtime configured, env keys in `.env.example`)?
+- Service provisioned and credentials available?
+
+**Stop and ask the user** if anything required is missing. Do **not** install packages, add cron schedules, provision marketplace integrations, or modify project-level config (`vercel.ts`, `package.json` deps, `.env.example`, etc.) as part of this skill's run — the user wants to handle these manually. Report the gap as a short bulleted list and wait for the user to either:
+
+- install/set up the dependency themselves and tell you to proceed, or
+- explicitly authorize you to install/configure it as part of the ticket, or
+- redirect (descope the ticket, pick a different approach that uses existing deps, etc.).
+
+Only proceed once every required dependency is in place or the user has explicitly authorized the missing setup. Tickets should consume existing infrastructure; new infrastructure is the user's call.
+
 ## Step 3 — Plan (only if required)
 
 Post a concise, high-level plan of **how the feature will be implemented**: the approach, the major steps to take, key technical decisions, anything ambiguous in the ticket that needs the user's call, and how it'll be verified. Do **not** break it into PRs here — the stack breakup happens later in Step 5c after reading the code.
@@ -138,9 +158,9 @@ Re-run lint/typecheck/tests after deslop in case the cleanup touched anything th
 
 If the skill isn't installed in this environment, skip this step — don't attempt to deslop manually, and don't block the workflow on it.
 
-### 5c. Review the full diff; propose stack breakup (gate)
+### 5c. Review the full diff; propose stack breakup (conditional gate)
 
-Inspect the working-tree diff against `main` (e.g. `git diff main --stat`, then read the changes including untracked files via `git status`). Group similar functionality into a thorough-but-concise stack proposal the user can read in seconds. One bullet per branch, in stack order. Each: branch slug, one-line summary, scope (small/medium), key files. Pattern: refactors → scaffolding → behavior → UI → tests.
+Inspect the working-tree diff against `main` (e.g. `git diff main --stat`, then read the changes including untracked files via `git status`). Group similar functionality into a thorough-but-concise stack proposal. One bullet per branch, in stack order. Each: branch slug, one-line summary, scope (small/medium), key files. Pattern: refactors → scaffolding → behavior → UI → tests.
 
 ```md
 **Proposed PR stack** (4 PRs, bottom → top)
@@ -151,11 +171,25 @@ Inspect the working-tree diff against `main` (e.g. `git diff main --stat`, then 
 4. `<agent>/feed-pagination-ui` (medium) — wire infinite scroll + tests. Files: `app/feed/feed.tsx`, `__tests__/feed.test.tsx`.
 ```
 
-**Generate the visual brief for the gate.** Before asking for approval, invoke the `draft-brief` skill if it's installed. It reads the working-tree diff and the stack proposal above (already in context) and produces a visual HTML one-pager — high-stakes changes (new endpoints, auth, schema) first, schema walked line by line — that a busy reviewer can approve from quickly.
+**Decide whether to gate.** The stack-breakup gate is **not always on** — it exists for cases the user genuinely needs to review before code is split and shipped. Use judgment along two axes:
 
-Always include the full stack proposal as text in the response itself, whether or not the brief was generated — the brief is a supplement, not a replacement. The user should be able to read the proposed stack inline without opening the brief. When `draft-brief` is installed, also give them the brief's path. Either way, the approval gate stands.
+- **Complexity** — does the change touch multiple subsystems, introduce new architecture/patterns, alter data flow, or carry non-trivial risk (auth, schema, payments, public API surface)? Or is it bounded — a focused bug fix, a small feature, a refactor inside one module?
+- **Ambiguity** — did the ticket prescribe the approach (clear acceptance criteria, one obvious implementation path)? Or did it leave significant decisions open (multiple viable approaches, vague scope, design calls that aren't spelled out)?
 
-Wait for explicit approval. The user may split, merge, or reorder — adjust and re-show. No splitting begins until approved.
+Gate when **either** axis is high: complex work, or ambiguous tickets where the user should sanity-check the interpretation before PRs go up. Skip the gate when the work is bounded **and** the ticket prescribed the approach — in that case go straight to 5d. Don't reduce this to PR count; a 3-PR refactor inside one module can be auto-go, a 1-PR change to auth middleware should gate.
+
+If unsure, gate — the cost of a quick approval is small; the cost of an unwanted stack is large.
+
+**If gating:**
+
+- Generate the visual brief — invoke the `draft-brief` skill if it's installed. It reads the working-tree diff and the stack proposal and produces a visual HTML one-pager (high-stakes changes first, schema walked line by line) for fast approval.
+- Always include the full stack proposal as text in the response, whether or not the brief was generated — the brief is a supplement. When `draft-brief` is installed, also give the brief's path.
+- Wait for explicit approval. The user may split, merge, or reorder — adjust and re-show. No splitting begins until approved.
+
+**If skipping the gate:**
+
+- **Do not** invoke `draft-brief` — the `final-brief` (Step 6e) alone is sufficient when the user hasn't been asked to pre-approve the stack.
+- Post the stack proposal as a brief informational note (so the user can still interject), then proceed straight to 5d without waiting.
 
 ### 5d. Split the implementation into the Graphite stack
 
@@ -202,21 +236,48 @@ For **each PR** (bottom-up), run this loop until either the review agent returns
    - **Findings** — for Codex, comments authored by `chatgpt-codex-connector` / `codex` or matching its summary format.
    - **Clean bill of health** — some review agents react with a 👍 (`+1`) on the PR description when they find no issues. For Codex, a `+1` reaction on the PR body authored by the review agent means "no findings on this PR." Treat this as the clean signal for the PR.
 4. **Triage each finding** into one of:
-   - **Fix** — real bug, correctness issue, security issue, or other clear defect.
-   - **Skip** — nit, style-only, false positive (the reviewer misread the code), already handled, or overly-defensive (adds complexity for scenarios that won't realistically occur — redundant null checks on framework-guaranteed values, error handling for impossible states, excessive validation on internal-only paths).
+   - **Fix** — real bug, correctness issue, security issue, or other clear defect that is realistic for this product at its end state.
+   - **Skip** — nit, style-only, false positive (the reviewer misread the code), already handled, overly-defensive (adds complexity for scenarios that won't realistically occur — redundant null checks on framework-guaranteed values, error handling for impossible states, excessive validation on internal-only paths), **or unrealistic for this product**.
 
-   When in doubt, lean toward Skip. The goal is to fix real bugs, not gold-plate the code.
+   **Realism check.** Before classifying as Fix, ask: is this finding actually realistic for **this product** at the **end state we're building toward**? A finding can be technically valid in the abstract but irrelevant in context — e.g. concurrency hardening for a code path that will only ever run from one operator console, rate-limit edge cases on an internal endpoint, race-condition fixes for a flow that runs serially in a cron job, scale concerns for a feature targeting a small user base. If the scenario the reviewer is guarding against won't occur in this product's actual usage, classify as Skip. When in doubt, lean toward Skip. The goal is to fix real bugs, not gold-plate the code.
 
-5. **Triage autonomously and report — no user gate.** The agent decides Fix vs. Skip on each finding itself and proceeds to fix the valid ones (point 6) without waiting for confirmation. A status message is still posted so the user has visibility and can interject if they disagree. Format:
+5. **Triage autonomously and report — no user gate.** The agent decides Fix vs. Skip on each finding itself and proceeds to act on them (point 6) without waiting for confirmation. A status message is still posted so the user has visibility and can interject if they disagree. Format:
    - **Context header** at the very top: ticket id + title, a one-line summary of what this stack is shipping, and a compact list of the PRs (slug + URL). The user shouldn't need to open anything to recall the scope.
    - **Per-PR review status**: for each PR, one of `clean` (review agent reacted 👍 on the PR body), `findings: N` (with N findings to address this round), `awaiting review`, or `re-review pending` (after a retrigger).
    - **Findings this round** with the agent's autonomous Fix/Skip decision + one-line reason + source link. New-this-round and carried-over both shown for clarity. Skip findings appear once and are not carried forward.
-   - **Next action**: "fixing the N valid findings now and retriggering review" (or "no actionable findings — waiting for next watcher tick").
+   - **Next action**: "fixing the N valid findings, recording N skips on the PR, and retriggering review" (or "no fixes — recording N skips on the PR and retriggering review", or "no actionable findings and no skips — waiting for next watcher tick").
 
    Don't wait — proceed straight to point 6. The user can still short-circuit the whole loop at any time via a chat merge signal or a GitHub `APPROVED` review (see Step 7).
 
-6. **Fix the valid findings** (those the agent classified as Fix in point 5) on the relevant branch. **Each finding gets its own commit** — don't batch multiple finding fixes into a single commit, and don't amend into prior commits. One finding → one focused commit with a message that references the finding it addresses. After each commit, push (don't force-push aside from what Graphite does for restacking). Use whatever Graphite-aware flow preserves the per-finding commit granularity — the Graphite skill knows the current commands.
-7. **Retrigger the review** (most agents only auto-review the first push). For Codex:
+6. **Act on the findings.**
+
+   **For each Fix finding:**
+   - Make the change on the relevant branch. **Each finding gets its own commit** — don't batch multiple finding fixes into a single commit, and don't amend into prior commits. One finding → one focused commit with a message that references the finding it addresses. Use whatever Graphite-aware flow preserves the per-finding commit granularity — the Graphite skill knows the current commands.
+   - **After each fix commit lands on the PR (i.e. is pushed):**
+     1. Post a top-level PR comment summarizing the fix:
+        ```bash
+        gh pr comment <num> --body "Fixed in <sha>: <one-line description of how it was fixed>"
+        ```
+     2. Reply directly to the review-agent's finding comment with the same fix reference, so the reviewer's thread is closed out:
+        ```bash
+        gh api repos/{owner}/{repo}/pulls/<num>/comments/<finding-comment-id>/replies \
+          -f body="Fixed in <sha>: <one-line description>"
+        ```
+        (For top-level issue comments rather than diff-line comments, post a follow-up issue comment quoting the finding instead.)
+
+   **For each Skip finding** (including the "unrealistic for this product" bucket from point 4):
+   - Reply to the finding comment with a short rationale so the reviewer's thread shows it was considered, not ignored:
+     ```bash
+     gh api repos/{owner}/{repo}/pulls/<num>/comments/<finding-comment-id>/replies \
+       -f body="Skipping: <one-line reason — e.g. 'this code path only runs from a single operator console; concurrency hardening isn't realistic for this product'>"
+     ```
+   - **Update the PR description** to record the explicit skip so future review rounds don't resurface it. Maintain a `## Explicit skips` section at the bottom of the PR body and append a bullet for each skip: `<one-line finding summary> — <reason>` with a link to the finding comment. Edit the PR body via:
+     ```bash
+     gh pr edit <num> --body "$(updated body)"
+     ```
+     The section serves as durable context for the review agent on the next pass.
+
+7. **Retrigger the review.** Always retrigger after acting on a round, **including rounds where every finding was skipped** — the explicit skip rationales (in replies and in the PR description) need another pass so the reviewer can either drop those points or push back with new arguments. The only round that does not retrigger is one where there were zero findings to act on in the first place. For Codex:
    ```bash
    gh pr comment <num> --body "@codex review"
    ```
