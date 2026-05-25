@@ -7,23 +7,17 @@
       "skillPath": "skills/advisor/SKILL.md",
       "computedHash": "b068e6c507bbba0e7af6ef6e23da901744cab21298a2d3e2c67ae9abd3c89cac"
     },
+    "brief": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/brief/SKILL.md",
+      "computedHash": "f0e68cb90c79e75f5df60f76ccc251af7d0119b31ab2679af76decd1c046e185"
+    },
     "deslop": {
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/deslop/SKILL.md",
       "computedHash": "234379fc379c84d6d6848bf1b9f062dff24cbcbb110ca423ee1fe6fa14f6701c"
-    },
-    "draft-brief": {
-      "source": "ilamanov/skills",
-      "sourceType": "github",
-      "skillPath": "skills/draft-brief/SKILL.md",
-      "computedHash": "665347959a5cdb79b2a115109c0441cfeaa5b167db31e3aee11a144d20e72bb3"
-    },
-    "final-brief": {
-      "source": "ilamanov/skills",
-      "sourceType": "github",
-      "skillPath": "skills/final-brief/SKILL.md",
-      "computedHash": "b8ae7693aa5a78795ad0d834377dbc36b191c5449e39b3b4454fbebb5bf77536"
     },
     "frontend-design": {
       "source": "anthropics/skills",
@@ -46,7 +40,7 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "46389b9897159d2b51d56b60ec6db694b4a44c3eae54ef8741afe2a46aa00888"
+      "computedHash": "18bd7aca88550cc615ec5e8486b5e312408176096493ed0bd26d0a53df93075d"
     },
     "spec-builder": {
       "source": "ilamanov/skills",
