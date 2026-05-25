@@ -41,10 +41,10 @@ Copy this into the response and tick as work progresses:
 - [ ] 4. Worktree + branch
 - [ ] 5a. Implement end-to-end on the working branch (no stack yet)
 - [ ] 5b. Deslop the working tree
-- [ ] 5c. Review the full diff; decide whether to gate; if gating, generate draft-brief + propose stack breakup — approved
+- [ ] 5c. Review the full diff; decide whether to gate; if gating, generate the brief (DRAFT mode) + propose stack breakup — approved
 - [ ] 5d. Split the implemented changes into the Graphite stack
 - [ ] 6. Submit stack; review loop per PR until clean or user-approved
-- [ ] 6e. Review complete → generate the final-brief
+- [ ] 6e. Review complete → generate the brief (FINAL mode)
 - [ ] 7. User merge signal → generate migrations; merge bottom-up
 - [ ] 8. Linear → Done; clean up worktree; report
 ```
@@ -102,7 +102,7 @@ In any of those cases, present 3–5 candidates with one-line summaries (or surf
 Read description, comments, attachments, status.
 
 - **Plan-first?** If the ticket explicitly asks for human plan approval ("plan first", "approve plan", "review plan before implementing"), do Step 3. Otherwise skip it.
-- **Resume?** If a worktree or branch already exists for this ticket, resume there.
+- **Resume vs. restart?** If a worktree, branch, or open PR stack already exists for this ticket, **do not silently resume**. Resuming abandoned work and restarting live work are both costly mistakes — the wrong default has burned full implementation sessions in the past. Inspect what exists first: is the worktree on disk with recent uncommitted/committed work? Does the branch have a meaningful diff against `main`? Are the PRs in the stack still in active review? If the answer is yes on all counts and the user's prompt is consistent with continuing (no "ignore previous", no "start over"), resume there. Otherwise — branch with no diff, worktree gone, PRs gone stale, or any signal the prior attempt was abandoned — surface a one-line inventory of what was found (branch name, last commit timestamp, PR URLs and states) and ask the user once whether to resume or start fresh. An explicit user override in the prompt ("ignore the previous attempt", "continue where we left off") is sufficient on its own and skips the question.
 
 Apply the Step 2 status transition (see table above).
 
@@ -182,13 +182,13 @@ If unsure, gate — the cost of a quick approval is small; the cost of an unwant
 
 **If gating:**
 
-- Generate the visual brief — invoke the `draft-brief` skill if it's installed. It reads the working-tree diff and the stack proposal and produces a visual HTML one-pager (high-stakes changes first, schema walked line by line) for fast approval.
-- Always include the full stack proposal as text in the response, whether or not the brief was generated — the brief is a supplement. When `draft-brief` is installed, also give the brief's path.
+- Generate the visual brief — invoke the `brief` skill if it's installed. It auto-detects DRAFT mode from the working-tree state and produces a visual HTML one-pager (concise TL;DR, PR stack near the top, high-stakes callouts, schema walked line by line, code tour with inline diff snippets) for fast approval.
+- Always include the full stack proposal as text in the response, whether or not the brief was generated — the brief is a supplement. When `brief` is installed, also give the brief's path.
 - Wait for explicit approval. The user may split, merge, or reorder — adjust and re-show. No splitting begins until approved.
 
 **If skipping the gate:**
 
-- **Do not** invoke `draft-brief` — the `final-brief` (Step 6e) alone is sufficient when the user hasn't been asked to pre-approve the stack.
+- **Do not** invoke `brief` here — the FINAL-mode brief generated at Step 6e is sufficient when the user hasn't been asked to pre-approve the stack.
 - Post the stack proposal as a brief informational note (so the user can still interject), then proceed straight to 5d without waiting.
 
 ### 5d. Split the implementation into the Graphite stack
@@ -286,7 +286,7 @@ If a finding spans multiple PRs, fix on the lowest PR that owns the code so chil
 
 ### 6e. Review complete — generate the final brief
 
-Once every watched PR is review-complete and the watcher has been torn down (see the watcher lifecycle above), and the user has not already given a merge signal, invoke the `final-brief` skill if it's installed. It reads the final commit history, the cumulative diff against `main`, and the review threads, and produces a visual HTML one-pager — final code state with high-stakes surface area first, a walkthrough of the key functions, and a map of which commits addressed which review findings — for the user's pre-merge pass. Give the user the brief's path, then wait at the Step 7 merge gate. If the user already gave a merge signal, skip straight to Step 7. If `final-brief` isn't installed, skip this step.
+Once every watched PR is review-complete and the watcher has been torn down (see the watcher lifecycle above), and the user has not already given a merge signal, invoke the `brief` skill if it's installed. With real PRs in place and review complete, the skill auto-detects FINAL mode and produces a visual HTML one-pager from the final commit history, the cumulative diff against `main`, the PR stack, and the review threads — high-stakes surface area first, the PR stack prominent near the top, a code tour through the important changes with inline diffs, and a per-PR timeline mapping each follow-up commit to the review finding or user steer that caused it. Give the user the brief's path, then wait at the Step 7 merge gate. If the user already gave a merge signal, skip straight to Step 7. If `brief` isn't installed, skip this step.
 
 ## Step 7 — Merge (gate)
 
