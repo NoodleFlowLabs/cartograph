@@ -11,7 +11,7 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/brief/SKILL.md",
-      "computedHash": "f0e68cb90c79e75f5df60f76ccc251af7d0119b31ab2679af76decd1c046e185"
+      "computedHash": "263f9da55daa5c78c9e41c0cc7b9a634051bace3310d7309c3f2feba668c5f81"
     },
     "deslop": {
       "source": "ilamanov/skills",
@@ -40,7 +40,13 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "18bd7aca88550cc615ec5e8486b5e312408176096493ed0bd26d0a53df93075d"
+      "computedHash": "f7797e54505ae31f10f292ba7b4f7a1df4fc9ee1561fc917b9653254d6da2bc6"
+    },
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "5ea13a6d9f0d4bb694405d79acd00cadec0d21bb138c4dd10fcf3c500cb835c2"
     },
     "spec-builder": {
       "source": "ilamanov/skills",

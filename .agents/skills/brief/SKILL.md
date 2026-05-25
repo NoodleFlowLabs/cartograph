@@ -26,7 +26,7 @@ The same skill produces two flavors of brief depending on the state of the work:
 
 If the user explicitly asks for one mode ("draft brief" / "final brief"), honor it. Otherwise pick automatically and state your choice at the top of your reply ("Generating a FINAL brief — stack is review-clean.").
 
-The difference between the modes is in *content*, not visual structure. The HTML scaffolding below applies to both; the mode-specific sections (PR evolution, review status) only appear in FINAL mode.
+The difference between the modes is in *content*, not visual structure. The HTML scaffolding below applies to both; mode-specific content (review status pills on each PR card, commit cause tags, skipped-finding rows) only appears in FINAL mode, inside the same PR Stack section both modes share.
 
 ## Voice — make it read like a guided walkthrough
 
@@ -44,7 +44,7 @@ Keep prose as connective tissue, not bulk. A skimmer still gets everything from 
 Identify the trunk branch (usually `main`). Then collect the full picture of what changed against it:
 
 - **Cumulative diff and stats** against trunk — `git diff <trunk>..HEAD --stat` and the full diff for the files that matter.
-- **Commits** on the branch / stack — `git log <trunk>..HEAD --oneline`, with full messages for the ones you'll walk in the tour.
+- **Commits** on the branch / stack — `git log <trunk>..HEAD --oneline`, plus **full commit messages** (`git log <trunk>..HEAD --format=fuller` or `git log <trunk>..HEAD --format=%B`) so you can pull out any explanatory body text the author wrote. Many commits will have only a subject line — that's fine, treat the body as optional. But when a commit *does* carry a meaningful body (a `Why:` paragraph, a rationale, a tradeoff note), it is the author's own explanation of that slice and belongs in the brief.
 - **Untracked files** (DRAFT mode especially) — new files often carry the most important code and are easy to miss. `git status --porcelain` then read them directly.
 - **Proposed PR stack, if one exists** — may be in the current conversation context, or in `proposed-pr-stack.md` (look in repo root and `.briefs/`). If none exists, omit the stack section. Do not invent one.
 - **Real PR stack, if one exists** (FINAL mode) — `gh pr list --head <branch>` and per-PR via `gh pr view <num> --json title,body,state,commits,reviews,reviewDecision`. If Graphite, also `gt log short`.
@@ -113,11 +113,13 @@ Use this section order exactly:
    - Title line: branch / stack name + a **mode pill that is visually loud** — solid colored background, white text, larger than body type (e.g. amber for `DRAFT`, green for `FINAL · review clean`, red for `FINAL · 2 findings open`). The reader should know which mode they're in from across the room. A muted tag-style chip is not enough.
    - **One or two sentence TL;DR.** No long narrative paragraph here. The single thing the reviewer most needs to know.
    - A compact horizontal meta strip: trunk, files changed, +/−, commits, generated timestamp.
-2. **PR Stack — prominent, near the top.** If a stack exists (proposed or real), it lives here, visually distinct, not buried in a four-column meta grid. A vertical visual stack of PR cards works well:
-   - Each card shows: position (`1/3`), PR number / slug, one-line summary, size (e.g. `+312 / −44 · 8 files`), status pill (`open` / `merged` / `draft` / `review-clean` / `2 findings`).
-   - For FINAL mode, also surface the review state on each card.
-   - **Single-PR briefs still get this section** — one PR card, not a hidden number in the meta strip. The reviewer needs to see "this is PR #22, open, review-clean" without hunting.
-   - If there is truly no PR yet *and* no proposed stack, omit the section and say so once in the TL;DR ("Working-tree only — no stack proposed yet.").
+2. **PR Stack — prominent, near the top, and self-contained.** If a stack exists (proposed or real), it lives here, visually distinct, not buried in a four-column meta grid. This section **also absorbs the per-PR commit/finding history** — there is no separate "PR evolution" section further down the page. Everything a reviewer needs to know about a given PR — what it is, what's in it, how it got there — lives on its card. A vertical visual stack of PR cards works well, where each card is a small composite block:
+   - **Header row.** Position (`1/3`), PR number / slug, one-line summary, size (e.g. `+312 / −44 · 8 files`), status pill (`open` / `merged` / `draft`). For FINAL mode, also a review-state pill (`review-clean` / `2 findings` / `1 skipped`).
+   - **Commit timeline — the body of the card.** A vertical list of every commit on the PR, in chronological order. Each row shows: short SHA, subject in monospace, and (FINAL mode) a cause tag — `initial` for the baseline, `review finding` / `user steering` / `other` (CI fix, restacking fallout, polish) for follow-ups. Cross-reference commit messages against review threads to attribute follow-ups; every follow-up must carry a cause.
+   - **Commit explanations, when the author wrote one.** Beneath a commit's subject row, render the **commit message body** (the lines after the subject) as muted, smaller prose. Preserve line breaks but don't show it as code. This is the author's own explanation of that slice and often carries the *why* the diff alone can't show. **Omit the body when it's empty or boilerplate** — a single `Why:` line that restates the subject, AI-attribution trailers, `Co-Authored-By` lines. Sparse is the right default: only the bodies that add signal expand; the rest are subject-only rows. For a PR with many commits and few meaningful bodies, this naturally produces a compact list with a couple of expanded rows.
+   - **Skipped review findings** (FINAL mode). Surface them as their own visually distinct row inside the card — warning-colored, with the finding summary and the reason it was skipped. They are part of the PR's history and belong on its card, not in a separate appendix.
+   - **Single-PR briefs still get this section** — one PR card carrying the full timeline, not a hidden number in the meta strip. The reviewer needs to see "this is PR #22, open, review-clean, three commits, one follow-up addressing finding X" without hunting.
+   - If there is truly no PR yet *and* no proposed stack, omit the section and say so once in the TL;DR ("Working-tree only — no stack proposed yet."). In that case, list the commits on the working branch as a single timeline block under the TL;DR using the same row format, so commit bodies aren't lost.
 3. **High-stakes callouts.** A small grid of colored callouts — endpoints, auth, schema, deps, config, destructive actions. Each callout is one or two lines: what surface, what changed, what to watch. If there are no high-stakes changes, show one neutral callout that says so — absence is information.
 4. **Endpoint Audit** (when the change adds or modifies more than one route / server action / API surface). A dedicated table — not a callout — with columns: `Route` / `Inputs` / `Success behavior` / `Failure behavior` / `Side effect` / `Auth`. One row per endpoint. This belongs above the schema walk because new surface area is usually the highest-stakes thing in a backend change. Skip this section if the change touches zero or one endpoint — the callout in (3) is enough.
 5. **Schema walk** (if any). The line-by-line table from Step 3.
@@ -128,11 +130,7 @@ Use this section order exactly:
    - **Inline code or diff snippet** — see rendering rules below. A tour stop with no code in it is not earning its place; either add the code or merge the stop into prose elsewhere.
    - **Optional: a lifecycle / flow diagram** for changes that introduce a multi-step state machine (purchase → grant → consume; queue → enrich → publish; draft → review → approve). Render it as a horizontal sequence of boxes with arrows using inline CSS — no SVG, no JS. One diagram per brief at most; it sits inside the relevant tour stop, not as a separate section.
    - **For briefs with 8+ tour stops, add a sticky tour TOC.** A left-side `position: sticky` column (or a top-anchored mini-nav for narrower viewports) listing every stop title with `#anchor` links. Highlight grouping by indenting child stops under their section heading. No JS — just sticky CSS and named anchors. This is what makes Graphite's tour navigable; without it a long brief forces linear scrolling.
-7. **PR evolution** (FINAL mode only, if any PR has follow-up commits). Per-PR timeline:
-   - Initial commit as a baseline row.
-   - Each follow-up commit on a row, tagged by cause: **review finding** / **user steering** / **other** (CI fix, restacking fallout, follow-up polish). One-line description of what it changed, with a SHA.
-   - Surface **skipped review findings** with the reason, in their own visually distinct row (warning-colored).
-8. **File index.** Compact, at the bottom. One row per file with a one-line description. Generated files can appear here.
+7. **File index.** Compact, at the bottom. One row per file with a one-line description. Generated files can appear here.
 
 ### Rendering inline code and diffs (no JS, no fonts)
 
@@ -167,11 +165,12 @@ Before handing off, check the brief against its purpose:
 - Is the mode pill visually loud enough that DRAFT vs FINAL is obvious at a glance?
 - Is the TL;DR one or two sentences, not a paragraph?
 - Is the PR Stack section present (even for a single PR) and above the high-stakes callouts?
-- Did you follow the exact section order (Hero → PR Stack → High-stakes → Endpoint Audit → Schema → Code Tour → PR Evolution → File Index)?
+- Within each PR card, did you surface commit message bodies where the author wrote one — and stay silent (no empty body block) where they didn't?
+- Did you follow the exact section order (Hero → PR Stack → High-stakes → Endpoint Audit → Schema → Code Tour → File Index)?
 - Does every Code Tour stop show the actual code (diff or source), not just describe it?
 - Is the tour ordered by understanding, not by filename?
 - Is every schema change accounted for line by line?
-- (FINAL) Is every follow-up commit attributed to a cause? Skipped findings surfaced in their own warning-colored row?
+- (FINAL) Inside each PR card, is every follow-up commit attributed to a cause and every skipped finding surfaced in its own warning-colored row — all on the card, not in a separate evolution section?
 - Did you claim a stack/review section that doesn't exist (or omit one that does)?
 - Anything padded? Tighten it.
 
