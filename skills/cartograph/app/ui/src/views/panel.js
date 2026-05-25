@@ -10,26 +10,26 @@ export function Panel({ activeTab, data, selectedId, setSelectedId, switchTab })
 
   if (activeTab === 'surfaces') {
     const surfaces = arr(data, 'surfaces')
-    const selected = findById(surfaces, selectedId) || surfaces[0]
+    const selected = findById(surfaces, selectedId)
     return selected
       ? html`<${SurfaceDetail} data=${data} surface=${selected} switchTab=${switchTab} />`
-      : html`<${EmptyState} label="No surfaces found." />`
+      : html`<${EmptyState} label=${surfaces.length ? 'Select a surface from the sidebar' : 'No surfaces found.'} />`
   }
 
   if (activeTab === 'features') {
     const features = arr(data, 'features')
-    const selected = findById(features, selectedId) || features[0]
+    const selected = findById(features, selectedId)
     return selected
       ? html`<${FeatureDetail} data=${data} feature=${selected} switchTab=${switchTab} />`
-      : html`<${EmptyState} label="No features found." />`
+      : html`<${EmptyState} label=${features.length ? 'Select a feature from the sidebar' : 'No features found.'} />`
   }
 
   if (activeTab === 'flows') {
     const flows = arr(data, 'flows')
-    const selected = findById(flows, selectedId) || flows[0]
+    const selected = findById(flows, selectedId)
     return selected
       ? html`<${FlowDetail} data=${data} flow=${selected} switchTab=${switchTab} />`
-      : html`<${EmptyState} label="No flows found." />`
+      : html`<${EmptyState} label=${flows.length ? 'Select a flow from the sidebar' : 'No flows found.'} />`
   }
 
   if (activeTab === 'invariants') return html`<${InvariantsPanel} data=${data} />`

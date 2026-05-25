@@ -3,16 +3,17 @@
 .detail-stack,
 .techstack-stack,
 .codehealth-layout {
-  display: grid;
-  gap: 22px;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 32px;
 }
 
 .overview-stats-grid,
 .overview-card-grid,
 .tech-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
 }
 
@@ -33,33 +34,45 @@
 }
 
 .overview-stat-card {
-  padding: 18px;
+  padding: 18px 16px;
 }
 
 .overview-stat-value {
   color: var(--text);
-  font-family: var(--mono);
-  font-size: 34px;
-  font-weight: 800;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0;
   line-height: 1;
 }
 
-.overview-stat-label,
-.section-title,
-.overview-section-title {
+.section-title {
   color: var(--text-dim);
-  font-size: 11px;
-  font-weight: 800;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
+.overview-section-title {
+  margin-bottom: 16px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
 .overview-stat-label {
-  margin-top: 8px;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .overview-strip {
-  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  flex-wrap: wrap;
 }
 
 .health-row,
@@ -79,8 +92,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
-  padding: 0 10px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.03);
   font-size: 12px;
 }
 
@@ -93,20 +106,29 @@
   background: var(--text-dim);
 }
 
-.green,
+.green {
+  color: var(--green);
+}
+
 .score-dot.green,
 .status-dot.pass {
   color: var(--green);
   background: var(--green);
 }
 
-.yellow,
+.yellow {
+  color: var(--yellow);
+}
+
 .score-dot.yellow {
   color: var(--yellow);
   background: var(--yellow);
 }
 
-.red,
+.red {
+  color: var(--red);
+}
+
 .score-dot.red,
 .status-dot.fail {
   color: var(--red);
@@ -117,6 +139,7 @@
   display: grid;
   gap: 8px;
   padding: 16px;
+  cursor: pointer;
   text-align: left;
 }
 
@@ -124,7 +147,7 @@
 .info-card strong {
   color: var(--text);
   font-size: 15px;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .card-desc,
@@ -150,7 +173,8 @@
 .breakdown-list,
 .card-list,
 .finding-list {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
@@ -168,10 +192,13 @@
 
 .inline-links button,
 .inline-action {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 5px 9px;
   color: var(--accent);
   background: var(--accent-dim);
   font-size: 12px;
+  cursor: pointer;
 }
 
 .detail-stack {
@@ -183,28 +210,27 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: -8px;
 }
 
 .detail-header h1 {
-  margin-bottom: 10px;
+  margin-bottom: 4px;
   color: var(--text);
-  font-size: 28px;
-  line-height: 1.1;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .detail-tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  display: inline-block;
+  margin-right: 4px;
+  margin-bottom: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
   color: var(--accent);
   background: var(--accent-dim);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .impl-path {
@@ -214,7 +240,9 @@
 }
 
 .section-title {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .linked-item {
@@ -222,7 +250,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 11px 12px;
+  padding: 8px 12px;
   text-align: left;
 }
 
@@ -232,8 +260,8 @@
 
 .info-card {
   display: grid;
-  gap: 8px;
-  padding: 13px;
+  gap: 6px;
+  padding: 12px 16px;
 }
 
 .info-card-top,
@@ -247,10 +275,10 @@
 .copy-btn,
 .secondary-btn,
 .drop-zone-btn {
-  min-height: 32px;
+  min-height: 30px;
   padding: 0 12px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .prompt-block {
@@ -273,4 +301,10 @@
   color: var(--text-muted);
   font: 12px/1.55 var(--mono);
   white-space: pre-wrap;
+}
+
+.summary-bar {
+  gap: 16px;
+  padding: 14px 16px;
+  font-size: 13px;
 }
