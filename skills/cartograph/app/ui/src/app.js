@@ -170,7 +170,6 @@ export function App() {
   }
 
   async function createSession() {
-    sessionsRevision.current += 1
     setCreatingSession(true)
 
     try {
@@ -184,6 +183,7 @@ export function App() {
       }
 
       const nextSessions = normalizeSessions(body.state.sessions)
+      sessionsRevision.current += 1
       setSessionsState({ status: 'ready', sessions: nextSessions })
 
       if (isSession(body.session)) {
