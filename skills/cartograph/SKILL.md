@@ -38,7 +38,7 @@ When the user wants to add a new invariant:
 1. Extract the user's assertion text (the natural-language claim after "add invariant:" or similar phrasing).
 2. Read the codebase to understand the assertion:
    - Identify relevant files, functions, and patterns related to the assertion
-   - Determine which surfaces and features are involved (if a previous `cartograph.json` exists, reference its IDs for `surfaceIds` and `featureIds`)
+   - Determine which surfaces and features are involved (if a previous `.cartograph/mapping.json` exists, reference its IDs for `surfaceIds` and `featureIds`)
    - Map out the verification approach
 3. Expand the one-liner into a full invariant definition following the format in `references/invariant-definitions-format.md`:
    - Write the YAML frontmatter: generate a unique kebab-case `id`, set `severity` based on the nature of the assertion (critical for money/security/data integrity, high for core product logic, low for conventions), add relevant `tags`, and optionally add `surfaceIds`/`featureIds`
@@ -79,8 +79,8 @@ When the user wants to verify existing invariants without a full scan:
    N of M invariants passing.
    ```
 
-6. If `cartograph.json` exists at the repo root, update **only** the `invariants` key (leave all other data untouched). Write the `invariants` object following the schema in `references/json-schema.md`.
-7. If `cartograph.json` doesn't exist, create a minimal JSON with only `meta` and `invariants` keys.
+6. If `.cartograph/mapping.json` exists, update **only** the `invariants` key (leave all other data untouched). Write the `invariants` object following the schema in `references/json-schema.md`.
+7. If `.cartograph/mapping.json` doesn't exist, create the `.cartograph/` directory if needed and write a minimal JSON with only `meta` and `invariants` keys.
 
 ---
 
@@ -472,8 +472,8 @@ Run this yourself (no agent needed). Merge all agent outputs into the final JSON
    - `codeHealth.metrics = [coLocationMetric, drynessMetric, deadCodeMetric]`
 6. If Agent 11 returned a non-null result, include `"invariants": <agent-11-result>` in the final JSON. If Agent 11 returned `null` (no definitions file), omit the `invariants` key entirely.
 7. Assemble the final JSON following the schema in `references/json-schema.md`
-8. Write `cartograph.json` to the repo root
-9. Tell the user: "Start the Cartograph UI from your project root with `npm --prefix skills/cartograph/app install` once, then `npm --prefix skills/cartograph/app start`." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
+8. Write `.cartograph/mapping.json` (create the `.cartograph/` directory at the repo root if it doesn't exist yet)
+9. Tell the user: "Start the Cartograph UI from your project root with `npm --prefix ./agents/skills/cartograph/app install` once, then `npm --prefix ./agents/skills/cartograph/app start`. If your agent installs skills somewhere else, replace `./agents/skills/cartograph/app` with the actual skill path plus `/app`." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
 
 ## Important
 

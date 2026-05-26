@@ -40,7 +40,7 @@ export function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, 
     </div>
 
     <label
-      aria-label="Load cartograph.json"
+      aria-label="Load .cartograph/mapping.json"
       class=${`drop-zone ${dragging ? 'dragover' : ''}`}
       onDragLeave=${onDragLeave}
       onDragOver=${onDragOver}
@@ -49,7 +49,7 @@ export function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, 
       role="button"
       tabindex="0"
     >
-      <div class="drop-zone-title">Drop <code>cartograph.json</code> here</div>
+      <div class="drop-zone-title">Drop <code>mapping.json</code> here</div>
       <div class="drop-zone-sub">or browse for the generated file</div>
       <span class="drop-zone-btn">Browse files</span>
       <input
