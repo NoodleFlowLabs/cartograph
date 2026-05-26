@@ -42,6 +42,12 @@
       "skillPath": "skills/ship/SKILL.md",
       "computedHash": "f7797e54505ae31f10f292ba7b4f7a1df4fc9ee1561fc917b9653254d6da2bc6"
     },
+    "skill-cleaner": {
+      "source": "ilamanov/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-cleaner/SKILL.md",
+      "computedHash": "82d100a2ef04c45ae0c8321162f4c25610da184ce659f2ca68cdaeabdc11122a"
+    },
     "skill-creator": {
       "source": "anthropics/skills",
       "sourceType": "github",
