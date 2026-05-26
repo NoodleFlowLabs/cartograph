@@ -13,6 +13,7 @@ const DEFAULT_PORT = 6270
 const MAX_PORT = 6280
 const HOST = '127.0.0.1'
 const CARTOGRAPH_JSON = path.join('.cartograph', 'mapping.json')
+const SESSIONS_JSON = path.join('.cartograph', 'sessions.json')
 const INVARIANTS_MD = 'cartograph-invariants.md'
 
 const skillRoot = fileURLToPath(new URL('./', import.meta.url))
@@ -114,6 +115,45 @@ app.post('/api/cartograph/save', async (c) => {
   )
   notifyCartographChanged()
   return c.json({ ok: true })
+})
+
+app.get('/api/sessions', async (c) => {
+  const sessionsState = await readSessionsState()
+  return c.json(sessionsState)
+})
+
+app.post('/api/sessions', async (c) => {
+  let body
+
+  try {
+    body = await c.req.json()
+  } catch (error) {
+    return c.json(
+      {
+        error: 'invalid JSON',
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      400,
+    )
+  }
+
+  const name = normalizeSessionName(body?.name)
+
+  if (!name) {
+    return c.json({ error: 'expected body shape: { name: string }' }, 400)
+  }
+
+  const sessionsState = await readSessionsState()
+  const session = {
+    name,
+    slug: uniqueSessionSlug(name, sessionsState.sessions),
+  }
+  const nextState = {
+    sessions: [...sessionsState.sessions, session],
+  }
+
+  await writeSessionsState(nextState)
+  return c.json({ ok: true, session, sessions: nextState.sessions })
 })
 
 app.post('/api/invariants/save', async (c) => {
@@ -331,6 +371,61 @@ async function atomicWrite(filePath, contents) {
   }
 }
 
+async function readSessionsState() {
+  const filePath = resolveInProjectRoot(SESSIONS_JSON)
+
+  try {
+    const contents = await readFile(filePath, 'utf8')
+    const parsed = JSON.parse(contents)
+
+    if (!isSessionsState(parsed)) {
+      throw new Error(`invalid ${SESSIONS_JSON} shape`)
+    }
+
+    return parsed
+  } catch (error) {
+    if (isNodeError(error, 'ENOENT')) {
+      const emptyState = { sessions: [] }
+      await writeSessionsState(emptyState)
+      return emptyState
+    }
+
+    throw error
+  }
+}
+
+async function writeSessionsState(state) {
+  await atomicWrite(
+    resolveInProjectRoot(SESSIONS_JSON),
+    `${JSON.stringify(state, null, 2)}\n`,
+  )
+}
+
+function normalizeSessionName(value) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 80) : ''
+}
+
+function uniqueSessionSlug(name, sessions) {
+  const taken = new Set(sessions.map((session) => session.slug))
+  const base = slugify(name) || 'session'
+  let slug = base
+  let suffix = 2
+
+  while (taken.has(slug)) {
+    slug = `${base}-${suffix}`
+    suffix += 1
+  }
+
+  return slug
+}
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 function watchProjectRoot() {
   let timeout
 
@@ -390,6 +485,21 @@ function isInvariantSaveBody(value) {
     value !== null &&
     'contents' in value &&
     typeof value.contents === 'string'
+  )
+}
+
+function isSessionsState(value) {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray(value.sessions) &&
+    value.sessions.every(
+      (session) =>
+        typeof session === 'object' &&
+        session !== null &&
+        typeof session.name === 'string' &&
+        typeof session.slug === 'string',
+    )
   )
 }
 

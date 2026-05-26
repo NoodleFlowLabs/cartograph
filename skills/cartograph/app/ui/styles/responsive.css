@@ -1,4 +1,19 @@
 @media (max-width: 900px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .session-rail {
+    width: 100%;
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .session-list {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
   .header,
   .detail-header,
   .info-card-top,

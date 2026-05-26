@@ -7,11 +7,152 @@
 
 .app-shell {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex: 1;
   height: 100vh;
   min-height: 0;
   overflow: hidden;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.session-rail {
+  display: flex;
+  width: 220px;
+  min-height: 0;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.session-rail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.session-rail-title {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.session-list {
+  display: grid;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.session-item,
+.session-create-btn,
+.session-form button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.session-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-item:hover,
+.session-create-btn:hover,
+.session-form button:hover {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.session-item.active {
+  border-color: rgba(200, 167, 80, 0.28);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.session-create-btn {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--accent);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.session-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.session-form input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--surface-2);
+  font-size: 12px;
+  outline: none;
+}
+
+.session-form input:focus {
+  border-color: rgba(200, 167, 80, 0.3);
+}
+
+.session-form button {
+  min-height: 32px;
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.session-form button:disabled,
+.session-form input:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.session-form-error {
+  color: var(--red);
+  font-size: 12px;
+}
+
+.session-workspace {
+  min-height: 0;
+}
+
+.session-empty {
+  max-width: 720px;
 }
 
 .header {
