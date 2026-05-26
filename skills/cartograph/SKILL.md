@@ -1,33 +1,304 @@
 ---
 name: cartograph
 description: >
-  Map any TypeScript/JS web app codebase into a structured vocabulary of surfaces,
-  features, entities, relationships, operations, flows, compartments, invariants, and tech stack. Surfaces are
-  entry points (pages/routes); features are standalone capabilities embedded across
-  surfaces (e.g., "Prompt Wizard", "Star Credits", "Content Unlock"); compartments are
-  logical groupings of related code files that bridge product concepts to the underlying
-  codebase. Produces a JSON file and an interactive local UI. Use when the user
-  wants to understand a codebase, map its structure, see what entities exist, understand
-  data flows, examine code organization, or get a high-level overview of what an app does.
-  Triggers on: "map this codebase", "what does this app do", "show me the entities",
-  "cartograph", "extract the structure", "codebase overview", "understand this repo",
-  "code map", "show me the code structure", "add invariant", "verify invariants",
-  "check invariants".
+  Map a codebase into a structured vocabulary — surfaces, features, entities,
+  flows, compartments, invariants, tech stack — plus code-health metrics.
+  Produces a JSON map and an interactive local UI. Use whenever the user wants
+  to understand or audit a codebase.
 ---
 
 # Cartograph
 
-Extract a structural map of any TypeScript/JS web app: surfaces, features, entities, relationships, operations, flows, compartments, and tech stack. Four orthogonal axes — surfaces are where you go (pages/entry points), features are what you can do (standalone capabilities), entities are what the app works with (data), and compartments are how the code is organized (logical file groupings that bridge product concepts to the underlying codebase). The tech stack provides a comprehensive inventory of all technologies, frameworks, and libraries the project uses.
+Extract a structural map of a codebase: surfaces, features, entities, relationships, operations, flows, compartments, and tech stack. Four orthogonal axes — surfaces are where you go (pages/entry points), features are what you can do (standalone capabilities), entities are what the app works with (data), and compartments are how the code is organized (logical file groupings that bridge product concepts to the underlying codebase). The tech stack provides a comprehensive inventory of all technologies, frameworks, and libraries the project uses.
 
 ## Workflow
 
 ### Intent Detection
 
-Before starting the wave pipeline, detect the user's intent from their message:
+The default mode is **Full Scan** — produce a full structural map of the codebase plus code health. Run this unless the user's message clearly asks for one of the invariant-specific modes below.
 
-1. **Add Invariant** — If the message contains "add invariant", "new invariant", or a phrase like "add this invariant: '...'" → run the **Add Invariant Flow** below instead of the full scan.
-2. **Standalone Verify** — If the message contains "verify", "check invariants", "run invariants", or similar → run the **Standalone Verify Flow** below instead of the full scan.
-3. **Full Scan** — Otherwise, run the full wave pipeline (which includes invariant verification in Wave 3.5).
+Two narrower modes override the default:
+
+1. **Add Invariant** — message contains "add invariant", "new invariant", or "add this invariant: '...'" → **Add Invariant Flow**.
+2. **Standalone Verify** — message contains "verify", "check invariants", "run invariants", or similar → **Standalone Verify Flow**.
+
+---
+
+### Full Scan
+
+A scan has four steps:
+
+1. **Discover** — read the codebase to build the context every extract task needs.
+2. **Extract** — produce the structural map.
+3. **Analyze** — assess the assembled map for code health and invariants.
+4. **Assemble** — merge everything into `.cartograph/mapping.json`.
+
+Within Extract and Analyze, fan out via subagents on anything whose inputs are ready — don't run them serially in the orchestrator, wall time matters. The natural parallel batches are:
+
+```
+{ Surfaces, Entities }
+  → { Features, Operations }
+  → { Flows, Compartments, File Tree Weights }
+  → { Compartment Dependencies }
+  → { Co-location, DRYness, Dead Code, Invariants }
+```
+
+Every task below names its inputs and what it returns. All return shapes conform to `references/json-schema.md`.
+
+---
+
+#### 1. Discover
+
+Run this yourself before fanning out — it's fast and every Extract task needs it.
+
+1. Read `package.json` for project name and dependencies (framework detection).
+2. Glob for key structural files:
+   - Schema: `**/*.prisma`, `**/schema.*`, `**/models/**`
+   - Routes/Pages: `app/**/page.{tsx,ts,jsx,js}`, `app/api/**/*.{ts,js}`, `pages/**/*.{tsx,ts}`
+   - Server actions: grep for `"use server"`
+   - Components: `components/**/*.{tsx,jsx}`
+   - Lib/services: `lib/**/*.{ts,js}`, `services/**/*.{ts,js}`
+3. Read the directory tree to understand the overall shape.
+4. **Detect the tech stack.** For each technology in use, record name, version, category, source (where you found it), and confidence (high = explicit dependency + matching config; medium = dependency only; low = inferred from patterns). The full catalog of detection signals — config files, file patterns, import patterns — lives in `references/tech-stack-detection.md`. The category list lives in `references/json-schema.md`.
+5. Collect the full non-generated file inventory.
+
+Returns the **discover bundle**: file inventory + tech stack array. Pass this to every Extract and Analyze task.
+
+---
+
+#### 2. Extract
+
+##### Surfaces
+
+**Needs:** discover.
+
+Surfaces are entry points — self-contained user-facing experiences. Each app is fundamentally a collection of surfaces.
+
+1. Walk the route tree (`app/**/page.tsx`) and identify each distinct user-facing experience.
+2. Group related routes into surfaces (e.g., `/create` + `/create/[id]/edit` = one "Creation Studio" surface).
+3. Look for admin-only areas, standalone tools, dashboards, and onboarding flows.
+4. For each surface determine: **entrypoint** (main page file and route), **actor** (user/admin/system), **description** (what this surface does as a standalone experience).
+
+**Returns:** surfaces array (without `entityIds`, `operationIds`, `flowIds`, or `compartmentIds` — those get back-filled by later tasks and Assemble).
+
+##### Entities + Relationships
+
+**Needs:** discover.
+
+**Entities** — read schema/type definitions and extract domain objects:
+
+1. **DB models** (high confidence) — Prisma models, TypeORM entities, Mongoose schemas.
+2. **TypeScript types/interfaces** (medium confidence) — types used as API payloads, form data, state.
+3. **Enums** (high confidence) — enum definitions representing domain concepts.
+4. **Derived types** (medium confidence) — transformed versions like `PostWithAuthor`.
+
+For each entity: id, name, kind, description, source location, key fields (3–8 most important), confidence.
+
+**Relationships** — map connections between entities:
+
+1. Foreign keys and references in schema → `has-many`, `belongs-to`, `has-one`.
+2. Nested includes/joins → confirm relationships.
+3. Type compositions → `derives-from`.
+4. Looser references → `references`.
+
+**Returns:** two arrays — `entities` and `relationships`.
+
+##### Features
+
+**Needs:** discover, surfaces, entities.
+
+Features are standalone capabilities embedded within surfaces — what you can *do* in the app, as distinct from where you *go*. A like button, a prompt wizard, a credit purchase, an age gate are all features. They compose into surfaces; they aren't themselves pages.
+
+If you can't describe a feature without naming a specific page, it's probably part of a surface, not a feature.
+
+**The six kinds** — tool, interaction, transaction, gate, infrastructure, workflow — and the code patterns that signal each are catalogued in `references/feature-kinds.md`. Use that as your scanning checklist.
+
+**Separate implementations are separate features.** The same conceptual capability often exists as independent implementations in different surfaces — a user-facing "Prompt Wizard" modal in chat and an admin "Prompt Remix Wizard" in the post-management area. Always create separate feature entries; name them distinctly. After extracting from one surface, scan the others' component trees for similar patterns and grep for shared service imports — this is the easiest class of feature to miss.
+
+For each feature record: name, description, kind, `surfaceIds`, `entityIds`, implementations (2–5 most important files, not every file).
+
+**Returns:** features array (without `compartmentIds` — Compartment Dependencies fills that in).
+
+##### Operations
+
+**Needs:** discover, entities.
+
+For each entry point (route handler, server action, API endpoint):
+
+1. Which entity it targets.
+2. Operation type: `create`, `read`, `update`, `delete`, or `domain`.
+3. Descriptive name (e.g., "Publish Post", "Generate Preview").
+4. Side effects on other entities.
+5. Implementation location (file + function).
+
+**Returns:** operations array.
+
+##### Flows
+
+**Needs:** discover, surfaces, entities, features, operations.
+
+1. Start from UI pages — what can a user do on each page?
+2. Trace: UI action → handler → service → DB.
+3. Name each flow by its user-visible goal.
+4. Identify trigger and actor (user/admin/system).
+5. List steps in order, linking to operations and entities.
+
+**Returns:** flows array.
+
+##### Compartments
+
+**Needs:** discover, surfaces, features, entities, operations.
+
+Compartments are logical groupings of related files that form cohesive units of functionality. They bridge the product-side view (surfaces, features) with the underlying code structure, so a developer can navigate from "what does this feature do?" to "where does that code live?".
+
+1. Scan the file tree, using surfaces, features, entities, and operations as context.
+2. Group files using multiple signals:
+   - **Folder structure** — files in the same directory often belong together.
+   - **Import graph** — files that heavily import each other are likely in the same compartment.
+   - **Feature alignment** — files belonging to a feature should cluster into compartments mapping to those features.
+   - **Domain proximity** — files dealing with the same entity or business concept belong together.
+   - **Naming conventions** — files with related names (e.g., `image-*.ts`, `*-generation.*`) suggest a compartment.
+   - **Shared infrastructure** — files used by 3+ features may warrant their own compartment, or may appear in multiple compartments.
+3. Compartments are **nestable** — sub-compartments can be nested to any depth. A typical web app has 2–3 levels.
+4. Files are **non-exclusive** — a file can appear in multiple compartments (e.g., `lib/prisma.ts` in both "Database Access" and "Shared Infrastructure").
+5. **Every non-generated file must appear in at least one compartment.** Config files, build tooling, etc. go into a "Project Infrastructure" compartment. Exclude `generated/`, `node_modules/`, `.next/`, `dist/`.
+6. For each compartment: **name and description** (name after what it does, not folder names — "Image Generation Pipeline" not "app/chat/actions"), **tags** (from the vocabulary in `references/json-schema.md`, plus custom as needed), **files** (with role: component, hook, action, api, lib, type, config, style, test, other), **parentId** (null for top-level), **featureIds**, **surfaceIds**.
+
+Guidelines that keep compartments useful:
+
+- Don't create compartments with only 1 file unless it's a genuinely standalone module — merge small groupings into their parent.
+- Keep top-level compartments to 8–15 for a typical web app. Sub-compartments can be more.
+- Prefer meaningful groupings over 1:1 folder mapping. If a folder mixes unrelated files, split them. If related files span folders, group them.
+
+**Returns:** compartments array (without `dependsOn` — Compartment Dependencies fills that in).
+
+##### File Tree Weights
+
+**Needs:** discover, features.
+
+For every non-generated file, estimate what proportion of the file's purpose serves each feature.
+
+1. Take the full file list from the discover bundle.
+2. For each file, read it (or sample very large files) and estimate proportions.
+3. Files that don't belong to any product feature get `"__infrastructure__"` as their sole feature weight.
+4. Files serving multiple features get proportional weights (e.g., a shared hook → 50/50).
+5. All weights for a file must sum to 1.0.
+
+Estimation guidance:
+
+- Look at imports, function names, component names, and the overall purpose of the file.
+- A file 100% dedicated to one feature → `[{featureId: "that-feature", weight: 1.0}]`.
+- A shared utility used by multiple features → split proportionally.
+- Config files, generic type definitions, build config, middleware → `__infrastructure__`.
+- Prefer fewer features per file with higher weights over many features with tiny weights.
+
+**Returns:** array of `{file, featureWeights: [{featureId, weight}]}` entries — one per file.
+
+##### Compartment Dependencies
+
+**Needs:** compartments (plus surfaces and features for back-filling).
+
+1. Walk the imports of every file in every compartment.
+2. Map each imported file to the compartment(s) it belongs to.
+3. Record these as `dependsOn` edges on each compartment (inter-compartment only, no self-references).
+4. Populate `compartmentIds` on features — for each feature, determine which compartments implement it.
+5. Populate `compartmentIds` on surfaces — for each surface, determine which compartments serve it.
+
+**Returns:** updated compartments array (with `dependsOn` populated), plus a `featureCompartmentIds` map and a `surfaceCompartmentIds` map.
+
+---
+
+#### 3. Analyze
+
+Runs on the assembled extract.
+
+**How analysis tasks report.** Each analysis task emits a metric record with a score, a thresholds object, a one-line `summary`, and a `findings[]` array. The findings *are* the explanation for the score — every file or item that pulled the score below 100 must appear as a finding, with a concrete recommendation. The summary must include exact counts ("8 of 103 evaluated files are misplaced"), not vague prose ("most files are correctly placed").
+
+A sub-100 score with no findings is unactionable — treat it as a bug in your output, not a valid result.
+
+Each task's specific finding shape lives in `references/json-schema.md` under the metric's name.
+
+##### Co-location
+
+Read project instructions (`AGENTS.md`, `CLAUDE.md`, or equivalent) and extract explicit co-location conventions. If none are found, fall back to:
+
+- Files used by a single surface should live inside that surface's directory.
+- Files shared by multiple surfaces but representing one capability belong in `features/<capability>/`.
+- Root `components/`, `lib/`, and `actions/` are reserved for truly global code used by 3+ surfaces/features.
+- `components/ui/*` is exempt and considered correctly placed.
+
+Evaluate every non-generated, non-infrastructure file:
+
+1. Trace which files import it.
+2. Determine which surfaces/features actually consume it.
+3. Compare its current location to where the rules say it should live.
+4. Assign a binary `pass` / `fail` verdict.
+
+For each failing file, emit a finding with `action: "move"` (co-locate inside a surface or feature directory) or `action: "promote"` (move up into `features/` because it serves multiple surfaces). Include `file`, `verdict`, `reason`, `consumers[]`, and `recommendation`.
+
+Score: `(passing files / total evaluated files) * 100`.
+
+**Returns:** one metric object with `id: "co-location"`.
+
+##### DRYness
+
+1. Use features and compartments as the starting map.
+2. Look for candidate duplication before reading files:
+   - Features with the same `kind` and overlapping `entityIds` across different surfaces.
+   - Files in different surfaces with similar names or import patterns.
+   - Compartments with similar descriptions, tags, or overlapping `featureIds`.
+   - Hooks/actions/clients that wrap the same external API or workflow.
+3. Read the candidates to confirm real overlap — weigh both **functional overlap** (same product problem solved twice) and **structural similarity** (same technical pattern repeated with light variation).
+4. For each confirmed duplication: identify what's genuinely shared, what must stay implementation-specific, and where shared logic should live (respecting co-location rules).
+
+Each finding includes `id`, `title`, `severity`, `implementations[]`, `sharedLogic[]`, and `recommendation`.
+
+Score: `K = 200 / totalNonInfrastructureFiles`; `score = max(0, 100 - (findingCount * K))`.
+
+**Returns:** one metric object with `id: "dryness"` and `scalingFactor`.
+
+##### Dead Code
+
+1. Build an import map for every non-generated file (resolve relative imports and `@/` path aliases).
+2. Use the always-live entry-point list from `references/dead-code-detection.md` — those never count as dead even with zero importers.
+3. Walk the codebase looking for the five finding kinds documented in `references/dead-code-detection.md`:
+   - `dead-file` — non-entry-point with zero importers.
+   - `test-only-file` — non-test file imported only by tests (informational; doesn't affect the score).
+   - `orphaned-surface` — surface with no inbound navigation references.
+   - `orphaned-feature` — feature with empty `surfaceIds` or all-orphaned surfaces.
+   - `dead-entity` — DB model or DTO with no operation, feature, or query reference.
+
+Each finding includes `id`, `kind`, `severity`, `target`, `reason`, `evidence`, `recommendation`.
+
+Score: `totalEvaluated = filesEvaluated + surfacesEvaluated + featuresEvaluated + entitiesEvaluated`; `deadItems = deadFiles + orphanedSurfaces + orphanedFeatures + deadEntities`; `score = ((totalEvaluated - deadItems) / totalEvaluated) * 100`. Exclude test-only files from both numerator and denominator.
+
+**Returns:** one metric object with `id: "dead-code"`.
+
+##### Invariants
+
+Runs only if `cartograph-invariants.md` exists at the repo root. Otherwise return `null` and Assemble omits the `invariants` key entirely.
+
+1. Read `cartograph-invariants.md`.
+2. For every invariant, run the **Verifying an invariant** procedure below.
+3. Compute summary counts (total, passing, failing, skipped).
+4. Set `verifiedAt` to the current ISO 8601 timestamp and `definitionsFile` to `"cartograph-invariants.md"`.
+
+**Returns:** the `invariants` object matching the schema in `references/json-schema.md`, or `null`.
+
+---
+
+#### 4. Assemble
+
+Run this yourself. Merge everything into `.cartograph/mapping.json`:
+
+1. Populate `entityIds`, `operationIds`, `flowIds`, and `compartmentIds` on each surface — from operations, flows, and the Compartment Dependencies output.
+2. Populate `compartmentIds` on each feature — from the Compartment Dependencies output. Set `"files": []` (the empty array is the back-compat shape; `compartmentIds` is the primary code mapping).
+3. Include the `techStack` array from Discover as-is.
+4. Include the File Tree Weights array as-is under `fileTree`.
+5. Add a top-level `codeHealth` object: `analyzedAt = ISO timestamp`, `metrics = [coLocationMetric, drynessMetric, deadCodeMetric]`.
+6. If the Invariants analysis returned a non-null result, include `"invariants": <result>`. If `null`, omit the key.
+7. Write `.cartograph/mapping.json` at the repo root, creating the `.cartograph/` directory if needed. The final shape lives in `references/json-schema.md`.
+8. Tell the user: "Start the Cartograph UI from your project root with `npm --prefix skills/cartograph/app install` once, then `npm --prefix skills/cartograph/app start`." If invariants were verified, also print the invariant summary (same format as Standalone Verify).
 
 ---
 
@@ -37,21 +308,19 @@ When the user wants to add a new invariant:
 
 1. Extract the user's assertion text (the natural-language claim after "add invariant:" or similar phrasing).
 2. Read the codebase to understand the assertion:
-   - Identify relevant files, functions, and patterns related to the assertion
-   - Determine which surfaces and features are involved (if a previous `.cartograph/mapping.json` exists, reference its IDs for `surfaceIds` and `featureIds`)
-   - Map out the verification approach
-3. Expand the one-liner into a full invariant definition following the format in `references/invariant-definitions-format.md`:
-   - Write the YAML frontmatter: generate a unique kebab-case `id`, set `severity` based on the nature of the assertion (critical for money/security/data integrity, high for core product logic, low for conventions), add relevant `tags`, and optionally add `surfaceIds`/`featureIds`
-   - Write all body sections: **Assertion**, **Verification steps**, **Pass criteria**, **Known scope**, **Verification prompt**
-4. Write the invariant to `cartograph-invariants.md` at the repo root:
-   - If the file doesn't exist, create it with a `# Cartograph Invariants` heading
-   - Append the new invariant section at the end
-5. Run an initial verification of the new invariant by following the Verification steps you just wrote.
+   - Identify relevant files, functions, and patterns related to the assertion.
+   - Determine which surfaces and features are involved (if a previous `.cartograph/mapping.json` exists, reference its IDs for `surfaceIds` and `featureIds`).
+   - Map out the verification approach.
+3. Expand the one-liner into a full invariant definition following `references/invariant-definitions-format.md`:
+   - Write the YAML frontmatter: generate a unique kebab-case `id`; set `severity` (critical for money/security/data integrity, high for core product logic, low for conventions); add relevant `tags`; optionally add `surfaceIds`/`featureIds`.
+   - Write all body sections: **Assertion**, **Verification steps**, **Pass criteria**, **Known scope**, **Verification prompt**.
+4. Append the invariant to `cartograph-invariants.md` at the repo root. Create the file with a `# Cartograph Invariants` heading if it doesn't exist.
+5. Run an initial verification using the **Verifying an invariant** procedure below.
 6. Report the result:
-   - If passing: "Invariant added and verified. Definition saved to `cartograph-invariants.md`."
-   - If failing: "Invariant added but does NOT currently hold — definition saved anyway. Violations: [details]. Fix the code to make it pass, or edit the definition if the assertion needs adjusting."
+   - Passing: "Invariant added and verified. Definition saved to `cartograph-invariants.md`."
+   - Failing: "Invariant added but does NOT currently hold — definition saved anyway. Violations: [details]. Fix the code to make it pass, or edit the definition if the assertion needs adjusting."
 
-If the user's assertion is too vague to determine verification steps, ask a clarifying question before writing the definition.
+If the assertion is too vague to determine verification steps, ask a clarifying question before writing the definition.
 
 ---
 
@@ -59,12 +328,9 @@ If the user's assertion is too vague to determine verification steps, ask a clar
 
 When the user wants to verify existing invariants without a full scan:
 
-1. Read `cartograph-invariants.md` from the repo root.
-   - If the file doesn't exist: respond "No invariant definitions found. Add one with: `/cartograph add this invariant: '...'`"
-2. Parse each invariant section: extract frontmatter fields and body sections (see `references/invariant-definitions-format.md` for the format).
-3. For each enabled invariant, follow the **Verification steps** section, read the relevant files, evaluate the **Pass criteria**, and produce a result.
-4. For disabled invariants (`enabled: false`), emit a `"skipped"` result.
-5. Print a pass/fail summary to the console:
+1. Read `cartograph-invariants.md` from the repo root. If the file doesn't exist: respond "No invariant definitions found. Add one with: `/cartograph add this invariant: '...'`".
+2. Run the **Verifying an invariant** procedure below on every invariant in the file.
+3. Print a pass/fail summary to the console:
 
    ```
    Invariant Results (N checked)
@@ -79,408 +345,31 @@ When the user wants to verify existing invariants without a full scan:
    N of M invariants passing.
    ```
 
-6. If `.cartograph/mapping.json` exists, update **only** the `invariants` key (leave all other data untouched). Write the `invariants` object following the schema in `references/json-schema.md`.
-7. If `.cartograph/mapping.json` doesn't exist, create the `.cartograph/` directory if needed and write a minimal JSON with only `meta` and `invariants` keys.
+4. If `.cartograph/mapping.json` exists, update **only** the `invariants` key (leave all other data untouched). Write the `invariants` object following the schema in `references/json-schema.md`.
+5. If `.cartograph/mapping.json` doesn't exist, create the `.cartograph/` directory if needed and write a minimal JSON with only `meta` and `invariants` keys.
 
 ---
 
-### Full Scan Workflow
+### Verifying an invariant
 
-The full scan workflow runs in **5 waves plus a parallel health pass (Wave 3.5)**. Within each wave, spawn the listed agents **in parallel**, wait for all of them to finish, then move to the next wave. Each agent should return its results as a JSON array (or arrays) matching the schema in `references/json-schema.md`. Between waves, you are the orchestrator — collect agent outputs and pass them as context to the next wave's agents.
+The shared procedure used by Add Invariant Flow, Standalone Verify Flow, and the Invariants analysis task in Full Scan.
 
----
+1. Parse the invariant: extract frontmatter fields and body sections (see `references/invariant-definitions-format.md`).
+2. If `enabled: false`, emit a `"skipped"` result and stop.
+3. Follow the **Verification steps** section as a guide; read files listed in **Known scope** plus anything the steps reference.
+4. Evaluate whether the **Pass criteria** hold:
+   - Passing: record checked files, an empty violations array, and set `fixPrompt` to `null`.
+   - Failing: record specific violations with file paths, line numbers, what was expected, what was found, and a suggestion. Generate a self-contained `fixPrompt` that an AI agent can use to fix the specific violations — include the invariant name, violation details, affected paths/lines, and what needs to change.
+5. Set `verificationPrompt` on every result (passing or failing) to the **Verification prompt** from the invariant definition.
 
-### Wave 0: Discover Codebase Structure
-
-Run this yourself (no agent needed — it's fast and every later agent needs the results).
-
-1. Read `package.json` for project name and dependencies (framework detection)
-2. Glob for key structural files:
-   - Schema: `**/*.prisma`, `**/schema.*`, `**/models/**`
-   - Routes/Pages: `app/**/page.{tsx,ts,jsx,js}`, `app/api/**/*.{ts,js}`, `pages/**/*.{tsx,ts}`
-   - Server actions: grep for `"use server"`
-   - Components: `components/**/*.{tsx,jsx}`
-   - Lib/services: `lib/**/*.{ts,js}`, `services/**/*.{ts,js}`
-3. Read the directory tree to understand the overall shape
-4. **Detect the tech stack** — scan `package.json` (dependencies + devDependencies), config files, and project structure to identify all technologies in use. For each detected technology, record:
-   - **Name and version**: from `package.json` dependency entries
-   - **Category**: language, framework, styling, database, auth, api, testing, deployment, ai, payments, monitoring, or other (see `references/json-schema.md` for the full category list)
-   - **Source**: where the technology was detected (e.g., `"package.json"`, `"tailwind.config.ts"`)
-   - **Confidence**: high (explicit dependency + config file), medium (dependency only), low (inferred from patterns)
-
-   Detection signals:
-   - `package.json` dependencies and devDependencies (primary source — extract version numbers)
-   - Config files: `tsconfig.json` (TypeScript), `tailwind.config.*` (Tailwind), `prisma/schema.prisma` (Prisma), `next.config.*` (Next.js), `drizzle.config.*` (Drizzle), `.env*` files (service integrations), `jest.config.*` / `vitest.config.*` (testing), `playwright.config.*` (E2E testing), `Dockerfile` / `docker-compose.*` (Docker), `vercel.json` (Vercel), `sentry.*.config.*` (Sentry)
-   - File patterns: `*.module.css` (CSS Modules), `*.scss` / `*.sass` (Sass), `*.graphql` / `*.gql` (GraphQL)
-   - Import patterns in code: `@clerk/*`, `@auth/*`, `@stripe/*`, `openai`, `@anthropic-ai/*`, etc.
-
-   Return the tech stack as a JSON array conforming to the `techStack[]` schema in `references/json-schema.md`.
-
-5. Collect the full file inventory (all non-generated files). This is the "discover bundle" — pass it to every agent in later waves along with the detected tech stack.
+The result shape lives in `references/json-schema.md` under the `invariants` key.
 
 ---
-
-### Wave 1: Surfaces + Entities (parallel)
-
-Spawn **two agents in parallel**, wait for both to finish:
-
-#### Agent 1 — Surfaces
-
-Give this agent the discover bundle and ask it to identify all surfaces.
-
-Surfaces are the top-level organizational axis — self-contained entry points or standalone pieces of functionality. Each app is fundamentally a collection of surfaces.
-
-The agent should:
-
-1. Walk the route tree (`app/**/page.tsx`) and identify each distinct user-facing experience
-2. Group related routes into surfaces (e.g., `/create` + `/create/[id]/edit` = one "Creation Studio" surface)
-3. Look for admin-only areas, standalone tools, dashboards, and onboarding flows
-4. For each surface, determine:
-   - **Entrypoint**: main page file and route
-   - **Actor**: who uses it (user/admin/system)
-   - **Description**: what this surface does as a standalone experience
-5. Return: a JSON array of surfaces (without `entityIds`, `operationIds`, `flowIds`, or `compartmentIds` yet — those get populated in later waves)
-
-#### Agent 2 — Entities + Relationships
-
-Give this agent the discover bundle (specifically the schema/type file paths) and ask it to extract all entities and relationships.
-
-**Entities** — read schema/type definitions and extract domain objects:
-
-1. **DB models** (high confidence) — Prisma models, TypeORM entities, Mongoose schemas
-2. **TypeScript types/interfaces** (medium confidence) — types used as API payloads, form data, state
-3. **Enums** (high confidence) — enum definitions representing domain concepts
-4. **Derived types** (medium confidence) — transformed versions (e.g., `PostWithAuthor`)
-
-For each entity: id, name, kind, description, source location, key fields (3-8 most important), confidence.
-
-**Relationships** — map connections between entities:
-
-1. Foreign keys and references in schema → `has-many`, `belongs-to`, `has-one`
-2. Nested includes/joins → confirms relationships
-3. Type compositions → `derives-from`
-4. Looser references → `references`
-
-Return: two JSON arrays — `entities` and `relationships`.
-
----
-
-### Wave 2: Features + Operations (parallel)
-
-Spawn **two agents in parallel**, wait for both to finish. Pass each agent the discover bundle plus the Wave 1 outputs (surfaces, entities).
-
-#### Agent 3 — Features
-
-Give this agent the discover bundle, surfaces, and entities. Ask it to extract all features.
-
-Features are standalone capabilities embedded within surfaces. They're not pages — they're the reusable functional building blocks that surfaces compose. A surface is "where you go"; a feature is "what you can do there."
-
-Look for these patterns:
-
-1. **Tools** — interactive multi-step experiences (wizards, editors, sandboxes). Look for modal components, multi-step forms, stateful composition flows
-2. **Interactions** — single-action engagement patterns (like, save, follow, share). Look for optimistic-update hooks, toggle actions, engagement server actions
-3. **Transactions** — money/credit flows (purchase, tip, unlock). Look for payment integrations, credit deduction/grant logic, checkout flows
-4. **Gates** — access control mechanisms (age verification, NSFW filtering, auth walls). Look for middleware, overlay components, confirmation dialogs
-5. **Infrastructure** — backend capabilities used by other features (AI generation, media processing, webhook handlers). Look for polling loops, queue submissions, external API clients
-6. **Workflows** — multi-step admin/system processes (content review, scan pipelines, approval queues). Look for status machines, review UIs, batch processing
-
-For each feature:
-
-- **Name and description**: what this feature does as a standalone capability
-- **Kind**: tool, interaction, transaction, gate, infrastructure, or workflow
-- **surfaceIds**: which surfaces embed this feature
-- **entityIds**: which entities this feature reads/writes
-- **implementations**: key files (2-5 most important, not every file)
-
-Features should feel independently describable — "the like system", "the prompt wizard", "the star credit system". If you can't describe it without referencing a specific page, it's probably part of a surface, not a feature.
-
-**Separate implementations = separate features.** The same conceptual capability often exists as independent implementations in different surfaces — for example, a user-facing "Prompt Wizard" modal in chat and an admin "Prompt Remix Wizard" panel in the post management area. Always create a separate feature entry for each distinct implementation, even when they serve the same conceptual purpose. Two implementations are separate features if they have different UI components, different actors, or different capabilities. Name them distinctly. To avoid missing these: after extracting features from one surface, scan every other surface's component tree for similar patterns and grep for shared service imports.
-
-Return: a JSON array of features (without `compartmentIds` yet — that gets populated later).
-
-#### Agent 4 — Operations
-
-Give this agent the discover bundle, entities, and the list of route/action/API files from discover. Ask it to identify all operations.
-
-For each entry point (route handler, server action, API endpoint):
-
-1. Which entity it targets
-2. Operation type: `create`, `read`, `update`, `delete`, or `domain`
-3. Descriptive name (e.g., "Publish Post", "Generate Preview")
-4. Side effects on other entities
-5. Implementation location (file + function)
-
-Return: a JSON array of operations.
-
----
-
-### Wave 3: Flows + Compartments + File Tree (parallel)
-
-Spawn **three agents in parallel**, wait for all to finish. Pass each agent the discover bundle plus all Wave 1 and Wave 2 outputs (surfaces, entities, relationships, features, operations).
-
-#### Agent 5 — Flows
-
-Give this agent all prior outputs and ask it to synthesize flows.
-
-1. Start from UI pages — what can a user do on each page?
-2. Trace: UI action → handler → service → DB
-3. Name each flow by its user-visible goal
-4. Identify trigger and actor (user/admin/system)
-5. List steps in order, linking to operations and entities
-
-Return: a JSON array of flows.
-
-#### Agent 6 — Compartments
-
-Give this agent the discover bundle (especially the full file inventory), plus surfaces, features, entities, and operations. Ask it to group every non-generated file into compartments.
-
-Compartments are logical groupings of related files that form cohesive units of functionality. They bridge the product-side view (surfaces, features) with the underlying code structure, so a developer can navigate from "what does this feature do?" to "where does that code live?"
-
-The agent should:
-
-1. Scan the full codebase file tree, using the already-extracted surfaces, features, entities, and operations as context
-2. Group files into compartments using AI judgment based on multiple signals:
-   - **Folder structure** — files in the same directory or subtree often belong together
-   - **Import graph** — files that heavily import each other are likely in the same compartment
-   - **Feature alignment** — files belonging to a feature should cluster into compartments that map to those features
-   - **Domain proximity** — files dealing with the same entity or business concept belong together
-   - **Naming conventions** — files with related names (e.g., `image-*.ts`, `*-generation.*`) suggest a compartment
-   - **Shared infrastructure** — truly shared files (used by 3+ features) may warrant their own compartment or may appear in multiple compartments
-3. Compartments are **nestable** — sub-compartments can be nested to any depth the AI deems appropriate. A typical web app might have 2–3 levels
-4. Files are **non-exclusive** — a file can appear in multiple compartments (e.g., `lib/prisma.ts` in both "Database Access" and "Shared Infrastructure")
-5. **Every file must appear in at least one compartment.** Config files, build tooling, etc. go into a "Project Infrastructure" compartment. Exclude generated files (`generated/`, `node_modules/`, `.next/`, `dist/`)
-6. For each compartment, determine:
-   - **Name and description**: what this code area does (name after what it does, not folder names — "Image Generation Pipeline" not "app/chat/actions")
-   - **Tags**: semi-structured tags from the suggested vocabulary (see json-schema.md), plus custom tags as needed
-   - **Files**: all files in this compartment with their role (component, hook, action, api, lib, type, config, style, test, other)
-   - **parentId**: ID of parent compartment (null for top-level)
-   - **featureIds**: which features this compartment implements
-   - **surfaceIds**: which surfaces this compartment serves
-
-**Compartment guidelines:**
-
-- Don't create compartments with only 1 file unless it's a genuinely standalone module. Merge small groupings into their parent.
-- Keep top-level compartments to 8–15 for a typical web app. More sub-compartments are fine.
-- Prefer meaningful groupings over 1:1 folder mapping. If a folder contains unrelated files, split them. If related files span folders, group them.
-
-Return: a JSON array of compartments (without `dependsOn` yet — that gets populated in Wave 4).
-
-#### Agent 7 — File Tree Feature Weights
-
-_(Experimental — fully isolated from other data. See `specs/spec-file-tree.md` for the full spec.)_
-
-Give this agent the discover bundle (full file inventory) and the features array from Wave 2. Ask it to estimate, for every non-generated file, what percentage of the file's purpose is attributable to each feature.
-
-The agent should:
-
-1. Take the list of all non-generated files from the discover bundle.
-2. For each file, read the file (or a representative sample for very large files) and estimate what proportion of the file serves each feature.
-3. Files that don't belong to any product feature get `"__infrastructure__"` as their sole feature weight.
-4. Files serving multiple features get proportional weights (e.g., a shared hook → 50/50).
-5. All weights for a file must sum to 1.0.
-
-**Estimation guidance:**
-
-- Look at imports, function names, component names, and the overall purpose of the file.
-- A file 100% dedicated to one feature → `[{featureId: "that-feature", weight: 1.0}]`.
-- A shared utility used by multiple features → split proportionally.
-- Config files, generic type definitions, build config, middleware → `__infrastructure__`.
-- Prefer fewer features per file with higher weights over many features with tiny weights.
-
-Return: a JSON array of `{file, featureWeights: [{featureId, weight}]}` entries — one per file.
-
----
-
-### Wave 3.5: Code Health + Invariants (parallel)
-
-Spawn **up to four agents in parallel**, wait for all of them to finish. Pass each agent the discover bundle plus the relevant outputs from Waves 1–3. Agent 11 (Invariant Verification) only runs if `cartograph-invariants.md` exists at the repo root; otherwise it is skipped.
-
-#### Agent 8 — Co-location Analysis
-
-Give this agent the discover bundle (especially the full file inventory), plus surfaces, features, compartments, and the project's co-location rules from `AGENTS.md`, `CLAUDE.md`, or equivalent repo instructions.
-
-The agent should:
-
-1. Read project instructions and extract explicit co-location conventions. If none are found, fall back to these universal heuristics:
-   - Files used by a single surface should live inside that surface's directory
-   - Files shared by multiple surfaces but representing one capability belong in `features/<capability>/`
-   - Root `components/`, `lib/`, and `actions/` are reserved for truly global code used by 3+ surfaces/features
-   - `components/ui/*` is always exempt and considered correctly placed
-2. Evaluate every non-generated, non-infrastructure file:
-   - Trace which files import it
-   - Determine which surfaces/features actually consume it
-   - Compare its current location to where it should live per the rules
-   - Assign a binary `pass` / `fail` verdict
-3. For each failing file, emit a finding with a concrete recommendation:
-   - `"move"` when the file should be co-located inside a surface or feature directory
-   - `"promote"` when the file should move up into `features/` because it serves multiple surfaces
-4. Compute the score as `(passing files / total evaluated files) * 100`
-
-**Findings and summary requirements — these are strict:**
-
-- The `findings[]` array MUST contain one entry for every file that received a `"fail"` verdict. If the score is below 100%, there MUST be findings explaining exactly which files caused the deduction. An empty findings array with a sub-100% score is a bug.
-- Each finding MUST include `file`, `verdict`, `reason`, `consumers[]`, and `recommendation` (with `action` and `target`) — see `references/json-schema.md` for the exact shape.
-- The `summary` MUST be quantified — e.g., "8 of 103 evaluated files are misplaced" — not vague prose like "Most code follows co-location rules." Include the exact counts.
-
-Return: one metric object with:
-
-- `id: "co-location"`
-- `name`, `description`, `score`, `thresholds`, `summary`
-- `findings[]` in the co-location finding shape from `references/json-schema.md`
-
-#### Agent 9 — DRYness Analysis
-
-Give this agent the discover bundle, plus surfaces, features, entities, operations, and compartments.
-
-The agent should:
-
-1. Use features and compartments as the starting map of the codebase's functional areas
-2. Look for candidate duplication before reading file contents:
-   - Features with the same `kind` and overlapping `entityIds` across different surfaces
-   - Files in different surfaces with similar names or import patterns
-   - Compartments with similar descriptions, tags, or overlapping `featureIds`
-   - Hooks/actions/clients that wrap the same external API or workflow
-3. Read the candidate implementations to confirm real overlap, weighing both:
-   - **Functional overlap** — same product problem solved twice
-   - **Structural similarity** — same technical pattern repeated with light variation
-4. For each confirmed duplication finding, decide:
-   - What logic is genuinely shared
-   - What must stay implementation-specific
-   - Where the shared logic should live, respecting the project's co-location rules
-5. Compute the score with:
-   - `K = 200 / totalNonInfrastructureFiles`
-   - `score = max(0, 100 - (findingCount * K))`
-
-**Findings and summary requirements — these are strict:**
-
-- The `findings[]` array MUST contain one entry for every confirmed duplication. If the score is below 100%, there MUST be findings explaining exactly which duplications caused the deduction. An empty findings array with a sub-100% score is a bug.
-- Each finding MUST include `id`, `title`, `severity`, `implementations[]`, `sharedLogic[]`, and `recommendation` — see `references/json-schema.md` for the exact shape.
-- The `summary` MUST be quantified — e.g., "3 duplication clusters found across 7 files" — not vague prose. Include the exact finding count and affected file count.
-
-Return: one metric object with:
-
-- `id: "dryness"`
-- `name`, `description`, `score`, `thresholds`, `summary`
-- `scalingFactor`
-- `findings[]` in the DRYness finding shape from `references/json-schema.md`
-
-#### Agent 10 — Dead Code Analysis
-
-Give this agent the discover bundle, plus surfaces, features, entities, operations, and compartments.
-
-The agent should:
-
-1. Build an import map for every non-generated file in the discover bundle:
-   - Record which files import each file
-   - Resolve relative imports and `@/` path aliases
-2. Identify files that are always considered live entry points:
-   - `app/**/page.{ts,tsx,js,jsx}`
-   - `app/**/layout.{ts,tsx,js,jsx}`
-   - `app/api/**/*.{ts,js}`
-   - files containing a `"use server"` directive
-   - config roots such as `*.config.*`, `next.config.*`, `tailwind.config.*`, `postcss.config.*`, `tsconfig.*`, `package.json`, `.env*`, `middleware.ts`
-   - root app entry files such as `app/globals.css` and `app/manifest.ts`
-3. Detect dead files and test-only files:
-   - For each non-entry-point, non-generated file with zero importers, emit a `dead-file` finding
-   - For each non-entry-point, non-test file whose importers are all test files, emit a `test-only-file` finding
-   - Test-only files are informational and do not affect the score
-4. Detect orphaned surfaces:
-   - Search the codebase for navigation references to each surface route (`Link`, `href`, `router.push`, `router.replace`, `redirect`, nav config arrays)
-   - Emit an `orphaned-surface` finding when a surface has no inbound navigation references
-   - Exempt the root route, auth callback routes, and webhook or API-only routes
-5. Detect orphaned features:
-   - Emit an `orphaned-feature` finding when `surfaceIds` is empty or every referenced surface is orphaned
-   - Include implementation file deadness as secondary evidence when all implementation files are dead
-6. Detect dead entities:
-   - Evaluate only entities with `kind` of `"db-model"` or `"dto"`
-   - Emit a `dead-entity` finding when no operation references the entity, no feature references it, and no Prisma query references it
-   - Exempt enums from dead-entity analysis
-7. Compute the score with:
-   - `totalEvaluated = filesEvaluated + surfacesEvaluated + featuresEvaluated + entitiesEvaluated`
-   - `deadItems = deadFiles + orphanedSurfaces + orphanedFeatures + deadEntities`
-   - `score = ((totalEvaluated - deadItems) / totalEvaluated) * 100`
-   - Exclude test-only files from both numerator and denominator
-
-**Findings and summary requirements — these are strict:**
-
-- The `findings[]` array MUST contain one entry for every dead item (dead file, orphaned surface, orphaned feature, dead entity). Test-only files should also appear as informational findings. If the score is below 100%, there MUST be findings explaining exactly which items caused the deduction. An empty findings array with a sub-100% score is a bug.
-- Each finding MUST include `id`, `kind`, `severity`, `target`, `reason`, `evidence`, and `recommendation` — see `references/json-schema.md` for the exact shape and the kind-specific evidence formats.
-- The `summary` MUST be quantified and broken down by kind — e.g., "12 dead items found: 8 dead files, 1 orphaned surface, 1 orphaned feature, 2 dead entities. 3 test-only files flagged." — not vague prose like "No strong dead-code cluster surfaced." Include the exact counts per kind, plus the total evaluated.
-
-Return: one metric object with:
-
-- `id: "dead-code"`
-- `name`, `description`, `score`, `thresholds`, `summary`
-- `findings[]` in the dead-code finding shape from `references/json-schema.md`
-
-#### Agent 11 — Invariant Verification
-
-Give this agent the discover bundle and ask it to verify all invariants.
-
-The agent should:
-
-1. Read `cartograph-invariants.md` from the repo root
-2. If the file doesn't exist, return `null` (no invariants to verify — skip silently)
-3. Parse each invariant section: extract frontmatter fields and body sections (see `references/invariant-definitions-format.md` for the format)
-4. Skip invariants with `enabled: false` — emit a `"skipped"` result for each
-5. For each enabled invariant:
-   - Follow the **Verification steps** section as a guide
-   - Read the files listed in **Known scope** and any additional files the steps reference
-   - Evaluate whether the **Pass criteria** hold
-   - If passing: record the checked files, an empty violations array, and set `fixPrompt` to `null`
-   - If failing: record specific violations with file paths, line numbers, what was expected, what was found, and a suggestion. Generate a `fixPrompt` — a self-contained prompt that an AI agent can use to fix the specific violations (include the invariant name, the violation details, affected file paths and line numbers, and what needs to change). Set `verificationPrompt` to the re-verification prompt from the definition.
-6. For every result (passing or failing), include the `verificationPrompt` from the invariant definition's **Verification prompt** section
-7. Compute the summary counts (total, passing, failing, skipped)
-8. Set `verifiedAt` to the current ISO 8601 timestamp and `definitionsFile` to `"cartograph-invariants.md"`
-
-Return: the `invariants` object matching the schema in `references/json-schema.md`, or `null` if no definitions file exists.
-
----
-
-### Wave 4: Compartment Dependencies
-
-Spawn **one agent**. Pass it the compartments array from Wave 3, plus surfaces and features from earlier waves.
-
-The agent should:
-
-1. Walk the imports of every file in every compartment
-2. Map each imported file to the compartment(s) it belongs to
-3. Record these as `dependsOn` edges on each compartment (only inter-compartment, not self-references)
-4. Populate `compartmentIds` on features — for each feature, determine which compartments implement it
-5. Populate `compartmentIds` on surfaces — for each surface, determine which compartments serve it
-
-Return: the updated compartments array (with `dependsOn` populated), plus a `featureCompartmentIds` map and a `surfaceCompartmentIds` map.
-
----
-
-### Wave 5: Assemble + Output
-
-Run this yourself (no agent needed). Merge all agent outputs into the final JSON:
-
-1. Take the surfaces array and populate:
-   - `entityIds`: from entities referenced in that surface's routes/pages
-   - `operationIds`: from operations triggered within that surface
-   - `flowIds`: from flows that belong to that surface
-   - `compartmentIds`: from the Wave 4 mapping
-2. Take the features array and populate:
-   - `compartmentIds`: from the Wave 4 mapping
-   - Set `"files": []` (empty array — `compartmentIds` is the primary code-mapping mechanism; `files` is kept for backwards compatibility)
-3. Include the `techStack` array from Wave 0 as-is (no transformation needed)
-4. Include the `fileTree` array from Agent 7 as-is (no transformation needed)
-5. Add a top-level `codeHealth` object:
-   - `codeHealth.analyzedAt = ISO timestamp`
-   - `codeHealth.metrics = [coLocationMetric, drynessMetric, deadCodeMetric]`
-6. If Agent 11 returned a non-null result, include `"invariants": <agent-11-result>` in the final JSON. If Agent 11 returned `null` (no definitions file), omit the `invariants` key entirely.
-7. Assemble the final JSON following the schema in `references/json-schema.md`
-8. Write `.cartograph/mapping.json` (create the `.cartograph/` directory at the repo root if it doesn't exist yet)
-9. Tell the user: "Start the Cartograph UI from your project root with `npm --prefix ./agents/skills/cartograph/app install` once, then `npm --prefix ./agents/skills/cartograph/app start`. If your agent installs skills somewhere else, replace `./agents/skills/cartograph/app` with the actual skill path plus `/app`." If invariants were verified, also print the invariant summary to the console (same format as the Standalone Verify flow).
 
 ## Important
 
-- **Read-only** — never modify the codebase being analyzed
-- **Prefer inclusion** — when unsure, include with lower confidence
-- **Plain language** — descriptions should be understandable by a PM
-- **Relative paths** — all file paths relative to repo root
-- **Large repos** — analyze by feature/route directory and merge
-- **Agent outputs are JSON** — each agent returns its results as JSON arrays conforming to the schema, making it easy to merge in Wave 5
-- See `references/json-schema.md` for the exact output format
+- **Read-only on the analyzed codebase** — never modify it. Only `.cartograph/mapping.json` and (on user request) `cartograph-invariants.md` are written.
+- **Prefer inclusion with lower confidence** over omission when unsure.
+- **Plain-language descriptions** — a PM should be able to read them.
+- **Relative paths** — all file paths relative to repo root.
+- **Large repos** — analyze by feature/route directory and merge.
