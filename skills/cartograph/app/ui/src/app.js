@@ -14,6 +14,7 @@ export function App() {
   const [search, setSearch] = useState('')
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef(null)
+  const sourceModeRef = useRef('server')
   const data = loadState.status === 'ready' ? loadState.data : null
   const visibleTabs = useMemo(() => getVisibleTabs(data), [data])
   const displayTab = visibleTabs.some((tab) => tab.id === activeTab)
@@ -21,13 +22,24 @@ export function App() {
     : 'overview'
   const activeConfig = visibleTabs.find((tab) => tab.id === displayTab)
 
-  const loadCartograph = useCallback(async () => {
+  function setLoadStateForSource(sourceMode, nextState) {
+    sourceModeRef.current = sourceMode
+    setLoadState(nextState)
+  }
+
+  const loadCartograph = useCallback(async ({ forceServer = false } = {}) => {
+    if (forceServer) {
+      setLoadStateForSource('server', { status: 'loading' })
+    }
+
     try {
       const response = await fetch('/api/cartograph')
       const body = await response.json().catch(() => null)
 
+      if (sourceModeRef.current !== 'server') return
+
       if (response.status === 404) {
-        setLoadState({
+        setLoadStateForSource('server', {
           status: 'missing',
           message:
             text(body, 'error') ||
@@ -37,21 +49,23 @@ export function App() {
       }
 
       if (!response.ok || !isRecord(body)) {
-        setLoadState({
+        setLoadStateForSource('server', {
           status: 'error',
           message: text(body, 'error') || `Request failed with ${response.status}`,
         })
         return
       }
 
-      setLoadState({
+      setLoadStateForSource('server', {
         status: 'ready',
         data: normalizeData(body),
         lastUpdated: new Date(),
         source: 'local server',
       })
     } catch (error) {
-      setLoadState({
+      if (sourceModeRef.current !== 'server') return
+
+      setLoadStateForSource('server', {
         status: 'error',
         message: error instanceof Error ? error.message : String(error),
       })
@@ -65,7 +79,7 @@ export function App() {
 
     const events = new EventSource('/api/cartograph/stream')
     events.addEventListener('cartograph-changed', () => {
-      void loadCartograph()
+      if (sourceModeRef.current === 'server') void loadCartograph()
     })
 
     return () => {
@@ -82,11 +96,12 @@ export function App() {
 
   async function loadDroppedFile(file) {
     if (!file) return
+    sourceModeRef.current = 'file'
 
     try {
       const parsed = JSON.parse(await file.text())
       if (!isRecord(parsed)) throw new Error('Expected a JSON object')
-      setLoadState({
+      setLoadStateForSource('file', {
         status: 'ready',
         data: normalizeData(parsed),
         lastUpdated: new Date(),
@@ -96,7 +111,7 @@ export function App() {
       setSelectedId(null)
       setSearch('')
     } catch (error) {
-      setLoadState({
+      setLoadStateForSource('file', {
         status: 'error',
         message: `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
       })
@@ -110,7 +125,7 @@ export function App() {
   }
 
   function showWelcome() {
-    setLoadState({ status: 'welcome' })
+    setLoadStateForSource('welcome', { status: 'welcome' })
     setActiveTab('overview')
     setSelectedId(null)
     setSearch('')
@@ -131,7 +146,7 @@ export function App() {
       }}
       onDrop=${handleDrop}
       onFile=${loadDroppedFile}
-      onRefresh=${loadCartograph}
+      onRefresh=${() => loadCartograph({ forceServer: true })}
     />`
   }
 
