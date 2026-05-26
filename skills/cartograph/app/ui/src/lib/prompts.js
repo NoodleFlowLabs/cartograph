@@ -79,7 +79,7 @@ export function buildFileMapPrompt(data, feature) {
     .filter(Boolean)
     .join(', ')
 
-  return `Map every file that participates in the "${text(feature, 'name')}" feature and update cartograph.json.
+  return `Map every file that participates in the "${text(feature, 'name')}" feature and update .cartograph/mapping.json.
 
 Feature ID: ${itemId(feature)}
 Kind: ${text(feature, 'kind')}

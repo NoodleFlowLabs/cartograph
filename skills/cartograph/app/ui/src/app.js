@@ -30,7 +30,7 @@ export function App() {
           status: 'missing',
           message:
             text(body, 'error') ||
-            'No cartograph.json found. Run /cartograph from your agent.',
+            'No .cartograph/mapping.json found. Run /cartograph from your agent.',
         })
         return
       }
