@@ -6,6 +6,10 @@
     display: grid;
   }
 
+  .header-actions {
+    justify-content: flex-start;
+  }
+
   .main {
     display: flex;
     flex-direction: column;

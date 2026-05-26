@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { formatter, tabs } from './config.js'
 import { html } from './lib/html.js'
 import { arr, getVisibleTabs, isRecord, normalizeData, text } from './lib/data.js'
@@ -13,6 +13,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
   const [dragging, setDragging] = useState(false)
+  const fileInput = useRef(null)
   const data = loadState.status === 'ready' ? loadState.data : null
   const visibleTabs = useMemo(() => getVisibleTabs(data), [data])
   const displayTab = visibleTabs.some((tab) => tab.id === activeTab)
@@ -108,6 +109,17 @@ export function App() {
     void loadDroppedFile(event.dataTransfer.files[0])
   }
 
+  function showWelcome() {
+    setLoadState({ status: 'welcome' })
+    setActiveTab('overview')
+    setSelectedId(null)
+    setSearch('')
+  }
+
+  function openFilePicker() {
+    fileInput.current?.click()
+  }
+
   if (loadState.status !== 'ready' || !data) {
     return html`<${Welcome}
       dragging=${dragging}
@@ -136,7 +148,26 @@ export function App() {
         <${Stat} label="features" value=${arr(data, 'features').length} />
         <${Stat} label="entities" value=${arr(data, 'entities').length} />
         <${Stat} label="flows" value=${arr(data, 'flows').length} />
+        <span>source ${loadState.source}</span>
         <span>updated ${formatter.format(loadState.lastUpdated)}</span>
+      </div>
+      <div class="header-actions">
+        <button class="secondary-btn" onClick=${showWelcome} type="button">
+          Welcome
+        </button>
+        <button class="secondary-btn" onClick=${openFilePicker} type="button">
+          Change JSON
+        </button>
+        <input
+          accept=".json,application/json"
+          hidden
+          onChange=${(event) => {
+            void loadDroppedFile(event.target.files?.[0])
+            event.currentTarget.value = ''
+          }}
+          ref=${fileInput}
+          type="file"
+        />
       </div>
     </header>
 
