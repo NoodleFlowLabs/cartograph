@@ -23,6 +23,7 @@ const port = await choosePort()
 const app = new Hono()
 const clients = new Set()
 const encoder = new TextEncoder()
+let sessionsWriteQueue = Promise.resolve()
 
 const vendorFiles = new Map([
   ['/vendor/htm.module.js', path.join(skillRoot, 'node_modules/htm/dist/htm.module.js')],
@@ -122,19 +123,7 @@ app.get('/api/sessions', async (c) => {
 })
 
 app.post('/api/sessions', async (c) => {
-  const state = await readSessionsState()
-  const created = nextPlaceholderSession(state.sessions)
-  const nextState = {
-    version: 1,
-    sessions: [...state.sessions, created],
-  }
-
-  await atomicWrite(
-    resolveInProjectRoot(SESSIONS_JSON),
-    `${JSON.stringify(nextState, null, 2)}\n`,
-  )
-
-  return c.json({ session: created, state: nextState })
+  return c.json(await enqueueSessionCreate())
 })
 
 app.post('/api/invariants/save', async (c) => {
@@ -407,6 +396,28 @@ function nextPlaceholderSession(sessions) {
 
     suffix += 1
   }
+}
+
+function enqueueSessionCreate() {
+  const nextWrite = sessionsWriteQueue.then(createSession)
+  sessionsWriteQueue = nextWrite.catch(() => undefined)
+  return nextWrite
+}
+
+async function createSession() {
+  const state = await readSessionsState()
+  const created = nextPlaceholderSession(state.sessions)
+  const nextState = {
+    version: 1,
+    sessions: [...state.sessions, created],
+  }
+
+  await atomicWrite(
+    resolveInProjectRoot(SESSIONS_JSON),
+    `${JSON.stringify(nextState, null, 2)}\n`,
+  )
+
+  return { session: created, state: nextState }
 }
 
 function watchProjectRoot() {
