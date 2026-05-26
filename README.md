@@ -131,11 +131,13 @@ Works in Claude Code, Codex, or any agent that supports skills. This scans your 
 Start the bundled local UI from your project root:
 
 ```bash
-npm --prefix skills/cartograph/app install
-npm --prefix skills/cartograph/app start
+npm --prefix ./agents/skills/cartograph/app install
+npm --prefix ./agents/skills/cartograph/app start
 ```
 
-The install is a one-time setup for the skill-local runtime dependencies. The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map. The UI and server are maintained as source under `skills/cartograph/app`; there is no Vite build or generated server bundle to commit.
+The examples above assume the skill is installed at `./agents/skills/cartograph`. If your agent installs skills somewhere else, replace `./agents/skills/cartograph/app` with the actual skill path plus `/app`.
+
+The install is a one-time setup for the skill-local runtime dependencies. The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map. The UI and server are maintained as source under the skill's `app` directory; there is no Vite build or generated server bundle to commit.
 
 ### 4. Iterate
 
