@@ -1,3 +1,4 @@
+.app-frame,
 .app-shell,
 .welcome-shell {
   min-height: 100vh;
@@ -5,13 +6,155 @@
   color: var(--text);
 }
 
+.app-frame {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;
   flex: 1;
-  height: 100vh;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.sessions-rail {
+  display: flex;
+  flex-direction: column;
+  width: 184px;
+  min-width: 184px;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: #08080b;
+  overflow: hidden;
+}
+
+.sessions-rail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sessions-rail-title {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.session-create-btn {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.session-create-btn:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.session-create-btn:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+.sessions-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.session-item {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.session-item:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.session-item.active {
+  border-color: rgba(200, 167, 80, 0.18);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.session-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessions-error {
+  margin: 8px;
+  padding: 8px;
+  border: 1px solid var(--red-dim);
+  border-radius: var(--radius);
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.session-content,
+.mapping-welcome-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mapping-welcome-panel .welcome-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+.session-empty-panel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+
+.session-empty-panel h1 {
+  max-width: min(620px, calc(100vw - 64px));
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 650;
 }
 
 .header {

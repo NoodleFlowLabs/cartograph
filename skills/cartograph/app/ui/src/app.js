@@ -1,21 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { formatter, tabs } from './config.js'
+import { formatter } from './config.js'
 import { html } from './lib/html.js'
 import { arr, getVisibleTabs, isRecord, normalizeData, text } from './lib/data.js'
 import { InvariantBadge, Stat } from './components/common.js'
 import { Sidebar } from './components/sidebar.js'
+import { EmptySessionPanel, SessionsRail, mappingSession } from './components/sessions.js'
 import { Welcome } from './components/welcome.js'
 import { Panel } from './views/panel.js'
 
 export function App() {
   const [loadState, setLoadState] = useState({ status: 'loading' })
+  const [sessionsState, setSessionsState] = useState({
+    status: 'loading',
+    sessions: [],
+  })
+  const [selectedSessionSlug, setSelectedSessionSlug] = useState(mappingSession.slug)
+  const [creatingSession, setCreatingSession] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef(null)
   const sourceModeRef = useRef('server')
+  const sessionsRevision = useRef(0)
   const data = loadState.status === 'ready' ? loadState.data : null
+  const sessions = useMemo(
+    () => [mappingSession, ...sessionsState.sessions],
+    [sessionsState.sessions],
+  )
+  const selectedSession =
+    sessions.find((session) => session.slug === selectedSessionSlug) || mappingSession
   const visibleTabs = useMemo(() => getVisibleTabs(data), [data])
   const displayTab = visibleTabs.some((tab) => tab.id === activeTab)
     ? activeTab
@@ -26,6 +40,39 @@ export function App() {
     sourceModeRef.current = sourceMode
     setLoadState(nextState)
   }
+
+  const loadSessions = useCallback(async () => {
+    const revision = sessionsRevision.current
+
+    try {
+      const response = await fetch('/api/sessions')
+      const body = await response.json().catch(() => null)
+
+      if (revision !== sessionsRevision.current) return
+
+      if (!response.ok || !isRecord(body)) {
+        setSessionsState({
+          status: 'error',
+          message: text(body, 'error') || `Request failed with ${response.status}`,
+          sessions: [],
+        })
+        return
+      }
+
+      setSessionsState({
+        status: 'ready',
+        sessions: normalizeSessions(body.sessions),
+      })
+    } catch (error) {
+      if (revision !== sessionsRevision.current) return
+
+      setSessionsState({
+        status: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        sessions: [],
+      })
+    }
+  }, [])
 
   const loadCartograph = useCallback(async ({ forceServer = false } = {}) => {
     if (forceServer) {
@@ -73,6 +120,10 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    void loadSessions()
+  }, [loadSessions])
+
+  useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void loadCartograph()
     }, 0)
@@ -118,6 +169,37 @@ export function App() {
     }
   }
 
+  async function createSession() {
+    setCreatingSession(true)
+
+    try {
+      const response = await fetch('/api/sessions', { method: 'POST' })
+      const body = await response.json().catch(() => null)
+
+      if (!response.ok || !isRecord(body) || !isRecord(body.state)) {
+        throw new Error(
+          text(body, 'error') || `Request failed with ${response.status}`,
+        )
+      }
+
+      const nextSessions = normalizeSessions(body.state.sessions)
+      sessionsRevision.current += 1
+      setSessionsState({ status: 'ready', sessions: nextSessions })
+
+      if (isSession(body.session)) {
+        setSelectedSessionSlug(body.session.slug)
+      }
+    } catch (error) {
+      setSessionsState((current) => ({
+        ...current,
+        status: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      }))
+    } finally {
+      setCreatingSession(false)
+    }
+  }
+
   function handleDrop(event) {
     event.preventDefault()
     setDragging(false)
@@ -135,22 +217,23 @@ export function App() {
     fileInput.current?.click()
   }
 
-  if (loadState.status !== 'ready' || !data) {
-    return html`<${Welcome}
-      dragging=${dragging}
-      loadState=${loadState}
-      onDragLeave=${() => setDragging(false)}
-      onDragOver=${(event) => {
-        event.preventDefault()
-        setDragging(true)
-      }}
-      onDrop=${handleDrop}
-      onFile=${loadDroppedFile}
-      onRefresh=${() => loadCartograph({ forceServer: true })}
-    />`
-  }
-
-  return html`<main class="app-shell">
+  const mappingPanel =
+    loadState.status !== 'ready' || !data
+      ? html`<div class="mapping-welcome-panel">
+          <${Welcome}
+            dragging=${dragging}
+            loadState=${loadState}
+            onDragLeave=${() => setDragging(false)}
+            onDragOver=${(event) => {
+              event.preventDefault()
+              setDragging(true)
+            }}
+            onDrop=${handleDrop}
+            onFile=${loadDroppedFile}
+            onRefresh=${() => loadCartograph({ forceServer: true })}
+          />
+        </div>`
+      : html`<div class="app-shell">
     <header class="header">
       <div class="header-left">
         <div class="logo">
@@ -240,5 +323,36 @@ export function App() {
         />
       </section>
     </div>
-  </main>`
+  </div>`
+
+  return html`<div class="app-frame">
+    <${SessionsRail}
+      creating=${creatingSession}
+      error=${sessionsState.status === 'error' ? sessionsState.message : ''}
+      onCreateSession=${createSession}
+      onSelectSession=${setSelectedSessionSlug}
+      selectedSlug=${selectedSession.slug}
+      sessions=${sessions}
+    />
+    <div class="session-content">
+      ${selectedSession.slug === mappingSession.slug
+        ? mappingPanel
+        : html`<${EmptySessionPanel} session=${selectedSession} />`}
+    </div>
+  </div>`
+}
+
+function normalizeSessions(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter(isSession)
+}
+
+function isSession(value) {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    value.name.trim() &&
+    typeof value.slug === 'string' &&
+    value.slug.trim()
+  )
 }

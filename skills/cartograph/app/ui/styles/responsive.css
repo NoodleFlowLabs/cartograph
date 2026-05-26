@@ -1,4 +1,27 @@
 @media (max-width: 900px) {
+  .app-frame {
+    flex-direction: column;
+  }
+
+  .sessions-rail {
+    width: 100%;
+    min-width: 0;
+    max-height: 156px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sessions-list {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .session-item {
+    width: 148px;
+    flex: 0 0 148px;
+  }
+
   .header,
   .detail-header,
   .info-card-top,
