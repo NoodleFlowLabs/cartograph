@@ -154,7 +154,6 @@
 .info-card p,
 .detail-header p,
 .empty-state,
-.preview-dashboard,
 .drop-zone-sub {
   color: var(--text-muted);
   font-size: 13px;

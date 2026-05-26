@@ -57,22 +57,7 @@
     min-height: 420px;
   }
 
-  .preview-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .welcome-shell {
     padding: 32px 16px;
-  }
-
-  .preview-content {
-    padding: 24px 12px;
-  }
-
-  .pv-stats,
-  .pv-modules {
-    display: grid;
-    grid-template-columns: 1fr;
-    width: 100%;
   }
 }
