@@ -153,7 +153,7 @@ export function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, 
 
     <div class="welcome-load">
       <div class="preview-cta">
-        Upload your <code>cartograph.json</code> to get your own dashboard like this.
+        Upload your <code>.cartograph/mapping.json</code> to get your own dashboard like this.
       </div>
 
       <div
@@ -162,7 +162,7 @@ export function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, 
         onDragOver=${onDragOver}
         onDrop=${onDrop}
       >
-        <div class="drop-zone-title">Drop <code>cartograph.json</code> here</div>
+        <div class="drop-zone-title">Drop <code>mapping.json</code> here</div>
         <div class="drop-zone-sub">or browse for the generated file</div>
         <label class="drop-zone-btn">
           Browse files

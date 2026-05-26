@@ -8,11 +8,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 
-const { access, mkdtemp, readFile, rename, rm, stat, writeFile } = fs
+const { access, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } = fs
 const DEFAULT_PORT = 6270
 const MAX_PORT = 6280
 const HOST = '127.0.0.1'
-const CARTOGRAPH_JSON = 'cartograph.json'
+const CARTOGRAPH_JSON = path.join('.cartograph', 'mapping.json')
 const INVARIANTS_MD = 'cartograph-invariants.md'
 
 const skillRoot = fileURLToPath(new URL('./', import.meta.url))
@@ -319,6 +319,7 @@ function resolveInProjectRoot(rel) {
 
 async function atomicWrite(filePath, contents) {
   const dir = path.dirname(filePath)
+  await mkdir(dir, { recursive: true })
   const tempDir = await mkdtemp(path.join(dir, '.cartograph-write-'))
   const tempFile = path.join(tempDir, path.basename(filePath))
 
@@ -334,10 +335,11 @@ function watchProjectRoot() {
   let timeout
 
   try {
-    watch(projectRoot, (eventType, filename) => {
+    watch(projectRoot, { recursive: true }, (eventType, filename) => {
       if (
         (eventType === 'change' || eventType === 'rename') &&
-        filename === CARTOGRAPH_JSON
+        filename &&
+        path.normalize(filename) === CARTOGRAPH_JSON
       ) {
         clearTimeout(timeout)
         timeout = setTimeout(notifyCartographChanged, 200)

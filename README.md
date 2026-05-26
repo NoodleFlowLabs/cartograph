@@ -100,7 +100,7 @@ Run just the invariant verification step without a full scan:
 /cartograph verify invariants
 ```
 
-This reads `cartograph-invariants.md`, checks each enabled invariant against your codebase, and prints a pass/fail summary. Results are also written to the `invariants` key in `cartograph.json` (all other data is preserved), so you can view them in the local UI.
+This reads `cartograph-invariants.md`, checks each enabled invariant against your codebase, and prints a pass/fail summary. Results are also written to the `invariants` key in `.cartograph/mapping.json` (all other data is preserved), so you can view them in the local UI.
 
 ### Copy-Paste Prompts
 
@@ -124,7 +124,7 @@ npx skills add NoodleFlowLabs/cartograph --skill cartograph
 /cartograph
 ```
 
-Works in Claude Code, Codex, or any agent that supports skills. This scans your entire codebase and outputs `cartograph.json` with all findings into your project root.
+Works in Claude Code, Codex, or any agent that supports skills. This scans your entire codebase and writes `.cartograph/mapping.json` with all findings into your project root.
 
 ### 3. Explore
 
@@ -137,7 +137,7 @@ npm --prefix ./agents/skills/cartograph/app start
 
 The examples above assume the skill is installed at `./agents/skills/cartograph`. If your agent installs skills somewhere else, replace `./agents/skills/cartograph/app` with the actual skill path plus `/app`.
 
-The install is a one-time setup for the skill-local runtime dependencies. The server binds to `127.0.0.1`, opens the UI in your browser, watches `cartograph.json`, and refreshes when `/cartograph` writes a new map. The UI and server are maintained as source under the skill's `app` directory; there is no Vite build or generated server bundle to commit.
+The install is a one-time setup for the skill-local runtime dependencies. The server binds to `127.0.0.1`, opens the UI in your browser, watches `.cartograph/mapping.json`, and refreshes when `/cartograph` writes a new map. The UI and server are maintained as source under the skill's `app` directory; there is no Vite build or generated server bundle to commit.
 
 ### 4. Iterate
 

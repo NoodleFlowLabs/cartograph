@@ -44,14 +44,14 @@ featureIds: [image-generation]
 | `severity` | Yes | `critical` \| `high` \| `low` | `critical` = money, security, data integrity. `high` = core product logic. `low` = conventions, nice-to-haves. |
 | `enabled` | No | boolean | Defaults to `true`. Set to `false` to skip during verification (shown as "paused" in the visualizer). |
 | `tags` | No | string[] | Freeform labels for grouping and filtering (e.g., `[money, credits]`, `[auth, security]`, `[media, ui]`). |
-| `surfaceIds` | No | string[] | IDs of surfaces this invariant applies to, from a previous `cartograph.json`. When omitted, the invariant is treated as global. |
+| `surfaceIds` | No | string[] | IDs of surfaces this invariant applies to, from a previous `.cartograph/mapping.json`. When omitted, the invariant is treated as global. |
 | `featureIds` | No | string[] | IDs of features this invariant applies to. When omitted, the invariant is treated as global. |
 
 ### Notes on scope fields
 
 - `surfaceIds` and `featureIds` are optional scope hints that help the agent focus verification on relevant parts of the codebase.
-- They reference IDs from a previous Cartograph scan (`cartograph.json`). If the referenced ID no longer exists, the agent ignores it and verifies based on the assertion text alone.
-- When no prior `cartograph.json` exists, omit these fields. They can be added after a full scan.
+- They reference IDs from a previous Cartograph scan (`.cartograph/mapping.json`). If the referenced ID no longer exists, the agent ignores it and verifies based on the assertion text alone.
+- When no prior `.cartograph/mapping.json` exists, omit these fields. They can be added after a full scan.
 
 ## Body sections
 
