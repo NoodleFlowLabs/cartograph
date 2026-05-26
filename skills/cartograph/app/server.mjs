@@ -13,6 +13,7 @@ const DEFAULT_PORT = 6270
 const MAX_PORT = 6280
 const HOST = '127.0.0.1'
 const CARTOGRAPH_JSON = path.join('.cartograph', 'mapping.json')
+const SESSIONS_JSON = path.join('.cartograph', 'sessions.json')
 const INVARIANTS_MD = 'cartograph-invariants.md'
 
 const skillRoot = fileURLToPath(new URL('./', import.meta.url))
@@ -22,6 +23,7 @@ const port = await choosePort()
 const app = new Hono()
 const clients = new Set()
 const encoder = new TextEncoder()
+let sessionsWriteQueue = Promise.resolve()
 
 const vendorFiles = new Map([
   ['/vendor/htm.module.js', path.join(skillRoot, 'node_modules/htm/dist/htm.module.js')],
@@ -114,6 +116,30 @@ app.post('/api/cartograph/save', async (c) => {
   )
   notifyCartographChanged()
   return c.json({ ok: true })
+})
+
+app.get('/api/sessions', async (c) => {
+  try {
+    return c.json(await readSessionsState())
+  } catch (error) {
+    if (error instanceof SessionsFileError) {
+      return c.json({ error: error.message }, 500)
+    }
+
+    throw error
+  }
+})
+
+app.post('/api/sessions', async (c) => {
+  try {
+    return c.json(await enqueueSessionCreate())
+  } catch (error) {
+    if (error instanceof SessionsFileError) {
+      return c.json({ error: error.message }, 500)
+    }
+
+    throw error
+  }
 })
 
 app.post('/api/invariants/save', async (c) => {
@@ -330,6 +356,87 @@ async function atomicWrite(filePath, contents) {
     await rm(tempDir, { force: true, recursive: true })
   }
 }
+
+async function readSessionsState() {
+  try {
+    const body = JSON.parse(await readFile(resolveInProjectRoot(SESSIONS_JSON), 'utf8'))
+    return normalizeSessionsState(body)
+  } catch (error) {
+    if (isNodeError(error, 'ENOENT')) {
+      return { version: 1, sessions: [] }
+    }
+
+    if (error instanceof SyntaxError) {
+      throw new SessionsFileError(`invalid ${SESSIONS_JSON}: ${error.message}`)
+    }
+
+    throw error
+  }
+}
+
+function normalizeSessionsState(value) {
+  if (!value || typeof value !== 'object' || !Array.isArray(value.sessions)) {
+    return { version: 1, sessions: [] }
+  }
+
+  const used = new Set()
+  const sessions = []
+
+  for (const session of value.sessions) {
+    if (!session || typeof session !== 'object') continue
+
+    const name = typeof session.name === 'string' ? session.name.trim() : ''
+    const slug = typeof session.slug === 'string' ? session.slug.trim() : ''
+
+    if (!name || !slug || slug === 'mapping' || used.has(slug)) continue
+
+    used.add(slug)
+    sessions.push({ name, slug })
+  }
+
+  return { version: 1, sessions }
+}
+
+function nextPlaceholderSession(sessions) {
+  const usedNames = new Set(sessions.map((session) => session.name))
+  const usedSlugs = new Set(sessions.map((session) => session.slug))
+  let suffix = 1
+
+  while (true) {
+    const name = suffix === 1 ? 'New session' : `New session ${suffix}`
+    const slug = suffix === 1 ? 'new-session' : `new-session-${suffix}`
+
+    if (!usedNames.has(name) && !usedSlugs.has(slug)) {
+      return { name, slug }
+    }
+
+    suffix += 1
+  }
+}
+
+function enqueueSessionCreate() {
+  const nextWrite = sessionsWriteQueue.then(createSession)
+  sessionsWriteQueue = nextWrite.catch(() => undefined)
+  return nextWrite
+}
+
+async function createSession() {
+  const state = await readSessionsState()
+  const created = nextPlaceholderSession(state.sessions)
+  const nextState = {
+    version: 1,
+    sessions: [...state.sessions, created],
+  }
+
+  await atomicWrite(
+    resolveInProjectRoot(SESSIONS_JSON),
+    `${JSON.stringify(nextState, null, 2)}\n`,
+  )
+
+  return { session: created, state: nextState }
+}
+
+class SessionsFileError extends Error {}
 
 function watchProjectRoot() {
   let timeout
