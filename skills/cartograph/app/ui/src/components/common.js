@@ -89,13 +89,6 @@ export function MetricCard({ label, value }) {
   </div>`
 }
 
-export function PreviewStat({ label, value }) {
-  return html`<div class="preview-stat">
-    <div>${value}</div>
-    <span>${label}</span>
-  </div>`
-}
-
 export function Stat({ label, value }) {
   return html`<span><span class="stat-val">${value}</span>${label}</span>`
 }

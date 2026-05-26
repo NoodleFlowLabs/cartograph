@@ -34,7 +34,6 @@
 .detail-meta,
 .chip-row,
 .health-row,
-.preview-flow,
 .summary-bar {
   display: flex;
   align-items: center;
