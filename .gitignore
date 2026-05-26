@@ -2,3 +2,4 @@ node_modules/
 .playwright-mcp/
 .DS_Store
 *.log
+third_party
