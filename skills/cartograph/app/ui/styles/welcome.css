@@ -139,6 +139,10 @@
   font-size: 12px;
 }
 
+.welcome-refresh {
+  padding: 8px 16px;
+}
+
 .welcome-footer {
   display: flex;
   width: 100%;

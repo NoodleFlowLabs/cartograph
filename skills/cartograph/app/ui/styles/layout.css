@@ -26,6 +26,7 @@
 }
 
 .header-left,
+.header-actions,
 .logo,
 .stats,
 .tabs,
@@ -50,12 +51,18 @@
 }
 
 .stats {
+  margin-left: auto;
   flex-wrap: wrap;
   gap: 16px;
   color: var(--text-dim);
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.02em;
+}
+
+.header-actions {
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .stat-val {

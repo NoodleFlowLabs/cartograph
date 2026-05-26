@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'preact/hooks'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { formatter, tabs } from './config.js'
 import { html } from './lib/html.js'
 import { arr, getVisibleTabs, isRecord, normalizeData, text } from './lib/data.js'
@@ -13,6 +13,8 @@ export function App() {
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
   const [dragging, setDragging] = useState(false)
+  const fileInput = useRef(null)
+  const sourceModeRef = useRef('server')
   const data = loadState.status === 'ready' ? loadState.data : null
   const visibleTabs = useMemo(() => getVisibleTabs(data), [data])
   const displayTab = visibleTabs.some((tab) => tab.id === activeTab)
@@ -20,13 +22,24 @@ export function App() {
     : 'overview'
   const activeConfig = visibleTabs.find((tab) => tab.id === displayTab)
 
-  const loadCartograph = useCallback(async () => {
+  function setLoadStateForSource(sourceMode, nextState) {
+    sourceModeRef.current = sourceMode
+    setLoadState(nextState)
+  }
+
+  const loadCartograph = useCallback(async ({ forceServer = false } = {}) => {
+    if (forceServer) {
+      setLoadStateForSource('server', { status: 'loading' })
+    }
+
     try {
       const response = await fetch('/api/cartograph')
       const body = await response.json().catch(() => null)
 
+      if (sourceModeRef.current !== 'server') return
+
       if (response.status === 404) {
-        setLoadState({
+        setLoadStateForSource('server', {
           status: 'missing',
           message:
             text(body, 'error') ||
@@ -36,21 +49,23 @@ export function App() {
       }
 
       if (!response.ok || !isRecord(body)) {
-        setLoadState({
+        setLoadStateForSource('server', {
           status: 'error',
           message: text(body, 'error') || `Request failed with ${response.status}`,
         })
         return
       }
 
-      setLoadState({
+      setLoadStateForSource('server', {
         status: 'ready',
         data: normalizeData(body),
         lastUpdated: new Date(),
         source: 'local server',
       })
     } catch (error) {
-      setLoadState({
+      if (sourceModeRef.current !== 'server') return
+
+      setLoadStateForSource('server', {
         status: 'error',
         message: error instanceof Error ? error.message : String(error),
       })
@@ -64,7 +79,7 @@ export function App() {
 
     const events = new EventSource('/api/cartograph/stream')
     events.addEventListener('cartograph-changed', () => {
-      void loadCartograph()
+      if (sourceModeRef.current === 'server') void loadCartograph()
     })
 
     return () => {
@@ -81,11 +96,12 @@ export function App() {
 
   async function loadDroppedFile(file) {
     if (!file) return
+    sourceModeRef.current = 'file'
 
     try {
       const parsed = JSON.parse(await file.text())
       if (!isRecord(parsed)) throw new Error('Expected a JSON object')
-      setLoadState({
+      setLoadStateForSource('file', {
         status: 'ready',
         data: normalizeData(parsed),
         lastUpdated: new Date(),
@@ -95,7 +111,7 @@ export function App() {
       setSelectedId(null)
       setSearch('')
     } catch (error) {
-      setLoadState({
+      setLoadStateForSource('file', {
         status: 'error',
         message: `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
       })
@@ -106,6 +122,17 @@ export function App() {
     event.preventDefault()
     setDragging(false)
     void loadDroppedFile(event.dataTransfer.files[0])
+  }
+
+  function showWelcome() {
+    setLoadStateForSource('welcome', { status: 'welcome' })
+    setActiveTab('overview')
+    setSelectedId(null)
+    setSearch('')
+  }
+
+  function openFilePicker() {
+    fileInput.current?.click()
   }
 
   if (loadState.status !== 'ready' || !data) {
@@ -119,7 +146,7 @@ export function App() {
       }}
       onDrop=${handleDrop}
       onFile=${loadDroppedFile}
-      onRefresh=${loadCartograph}
+      onRefresh=${() => loadCartograph({ forceServer: true })}
     />`
   }
 
@@ -136,7 +163,26 @@ export function App() {
         <${Stat} label="features" value=${arr(data, 'features').length} />
         <${Stat} label="entities" value=${arr(data, 'entities').length} />
         <${Stat} label="flows" value=${arr(data, 'flows').length} />
+        <span>source ${loadState.source}</span>
         <span>updated ${formatter.format(loadState.lastUpdated)}</span>
+      </div>
+      <div class="header-actions">
+        <button class="secondary-btn" onClick=${showWelcome} type="button">
+          Welcome
+        </button>
+        <button class="secondary-btn" onClick=${openFilePicker} type="button">
+          Change JSON
+        </button>
+        <input
+          accept=".json,application/json"
+          hidden
+          onChange=${(event) => {
+            void loadDroppedFile(event.target.files?.[0])
+            event.currentTarget.value = ''
+          }}
+          ref=${fileInput}
+          type="file"
+        />
       </div>
     </header>
 

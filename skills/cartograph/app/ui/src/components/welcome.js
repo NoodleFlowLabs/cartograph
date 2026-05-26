@@ -1,7 +1,15 @@
 import { useRef } from 'preact/hooks'
 import { html } from '../lib/html.js'
 
-export function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, onFile }) {
+export function Welcome({
+  dragging,
+  loadState,
+  onDragLeave,
+  onDragOver,
+  onDrop,
+  onFile,
+  onRefresh,
+}) {
   const fileInput = useRef(null)
   const message =
     loadState.status === 'loading'
@@ -55,12 +63,19 @@ export function Welcome({ dragging, loadState, onDragLeave, onDragOver, onDrop, 
       <input
         accept=".json,application/json"
         hidden
-        onChange=${(event) => onFile(event.target.files?.[0])}
+        onChange=${(event) => {
+          onFile(event.target.files?.[0])
+          event.currentTarget.value = ''
+        }}
         ref=${fileInput}
         type="file"
       />
       ${message ? html`<div class="drop-zone-error">${message}</div>` : null}
     </label>
+
+    <button class="welcome-refresh secondary-btn" onClick=${onRefresh} type="button">
+      Load local server file
+    </button>
 
     <div class="welcome-footer">
       <div class="welcome-local-link">
