@@ -22,6 +22,7 @@ export function App() {
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef(null)
   const sourceModeRef = useRef('server')
+  const sessionsRevision = useRef(0)
   const data = loadState.status === 'ready' ? loadState.data : null
   const sessions = useMemo(
     () => [mappingSession, ...sessionsState.sessions],
@@ -41,9 +42,13 @@ export function App() {
   }
 
   const loadSessions = useCallback(async () => {
+    const revision = sessionsRevision.current
+
     try {
       const response = await fetch('/api/sessions')
       const body = await response.json().catch(() => null)
+
+      if (revision !== sessionsRevision.current) return
 
       if (!response.ok || !isRecord(body)) {
         setSessionsState({
@@ -59,6 +64,8 @@ export function App() {
         sessions: normalizeSessions(body.sessions),
       })
     } catch (error) {
+      if (revision !== sessionsRevision.current) return
+
       setSessionsState({
         status: 'error',
         message: error instanceof Error ? error.message : String(error),
@@ -163,6 +170,7 @@ export function App() {
   }
 
   async function createSession() {
+    sessionsRevision.current += 1
     setCreatingSession(true)
 
     try {
