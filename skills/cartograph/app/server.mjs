@@ -119,11 +119,27 @@ app.post('/api/cartograph/save', async (c) => {
 })
 
 app.get('/api/sessions', async (c) => {
-  return c.json(await readSessionsState())
+  try {
+    return c.json(await readSessionsState())
+  } catch (error) {
+    if (error instanceof SessionsFileError) {
+      return c.json({ error: error.message }, 500)
+    }
+
+    throw error
+  }
 })
 
 app.post('/api/sessions', async (c) => {
-  return c.json(await enqueueSessionCreate())
+  try {
+    return c.json(await enqueueSessionCreate())
+  } catch (error) {
+    if (error instanceof SessionsFileError) {
+      return c.json({ error: error.message }, 500)
+    }
+
+    throw error
+  }
 })
 
 app.post('/api/invariants/save', async (c) => {
@@ -351,7 +367,7 @@ async function readSessionsState() {
     }
 
     if (error instanceof SyntaxError) {
-      throw new Error(`invalid ${SESSIONS_JSON}: ${error.message}`)
+      throw new SessionsFileError(`invalid ${SESSIONS_JSON}: ${error.message}`)
     }
 
     throw error
@@ -419,6 +435,8 @@ async function createSession() {
 
   return { session: created, state: nextState }
 }
+
+class SessionsFileError extends Error {}
 
 function watchProjectRoot() {
   let timeout
