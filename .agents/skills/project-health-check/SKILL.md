@@ -16,12 +16,21 @@ These are provided when the skill is invoked — don't hardcode them:
 
 ## Check 1 — Sync main branch with remote
 
-In the **main worktree** (not any feature worktree), bring the local `main` branch in sync with `origin/main` via a fast-forward only.
+In the **main worktree** (not any feature worktree), bring the local `main` branch in sync with `origin/main` via a fast-forward only. **Do this regardless of which branch the worktree is currently on or whether it's dirty** — a worktree sitting on a feature branch with uncommitted changes is the normal case, not a reason to skip. The mechanism for not disturbing in-progress work is to stash it, sync, and put everything back exactly as it was — not to bail out. A worktree that ends on the same branch it started on, with the same changes restored, has not been disturbed.
+
+The shape of the work, which is safe and reversible throughout:
+
+1. **Remember where the worktree started** — its current branch and whether it has uncommitted work — so you can put it back there afterward.
+2. **Set the in-progress work aside** if the tree is dirty, so `main` can be checked out cleanly. Use a reversible mechanism (stashing, including untracked files); nothing should be lost.
+3. **Get onto `main` and fast-forward it** to `origin/main`. If `main` has diverged so a fast-forward isn't possible, leave it untouched and note the divergence — then still finish the restore steps so the worktree ends where it started.
+4. **Put the worktree back the way you found it** — return to the starting branch and reapply the set-aside work.
+
+Restoring the work usually reapplies cleanly. In the case where the worktree started on `main` itself, the changes now reapply on top of the freshly fast-forwarded `main`, which can conflict if upstream touched the same files. **Resolve only very simple, unambiguous conflicts automatically.** For anything non-trivial or where you're not certain of the right resolution, **stop and consult the user** — keep their set-aside work preserved and intact, surface the conflict, and don't make risky edits to their uncommitted changes.
 
 Guardrails:
-- Don't disturb in-progress work — if the working tree is dirty or the current branch isn't `main`, skip this check and report why.
-- Don't force, reset, or rebase. If `main` has diverged from `origin/main`, report the divergence and move on.
-- On success, note whether `main` moved (and to what SHA) so the final summary is concrete.
+- Fast-forward only — never force, reset, or rebase `main`. If it has diverged, report and move on.
+- The worktree **must end on the same branch it started on**, with the same changes present — returning to the branch and reapplying the work are mandatory, not optional. Never discard set-aside work you couldn't cleanly restore.
+- On success, note whether `main` moved (and to what SHA), and whether you set work aside / restored it or returned to a non-`main` branch, so the final summary is concrete.
 
 ## Check 2 — Refresh installed skills
 
@@ -50,7 +59,7 @@ Only once the user has explicitly picked or confirmed a ticket, hand it to the `
 
 End with a brief report covering every check:
 
-- **Check 1** — main synced (note new SHA if it moved) or "already up to date"; or what blocked it.
+- **Check 1** — main synced (note new SHA if it moved) or "already up to date"; if the worktree was on a feature branch or dirty, note that work was stashed, main synced, and the branch + changes restored; flag any stash-restore conflict left for the user; or report a divergence / what otherwise blocked it.
 - **Check 2** — skills refreshed (list updated skills + PR link) or "already up to date"; or what blocked it.
 - **Check 3** — ticket picked + current ship status; or candidates awaiting a pick; or "no actionable ticket"; or what blocked it.
 - Anything that needs the user's attention.

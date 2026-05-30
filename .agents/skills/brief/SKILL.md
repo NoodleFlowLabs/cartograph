@@ -1,6 +1,6 @@
 ---
 name: brief
-description: Generates a rich, visual HTML one-pager that lets a busy reviewer understand a body of changes and either approve a proposed PR stack or merge a finished one — without reading the diff themselves. Auto-detects mode from the state of the work — DRAFT (working-tree changes plus a proposed stack, pre-approval) or FINAL (a real PR stack with review complete, pre-merge). The brief leads with a concise TL;DR, surfaces the PR stack prominently near the top, calls out high-stakes changes (endpoints, auth, schema), and then walks the reviewer through the important code as a numbered Code Tour with inline diff snippets — the way an author would walk a colleague through their work. Use whenever someone wants to eyeball a change before approving or merging — "review the changes", "show me what changed", "summarize the diff / the branch / the stack", "what am I about to approve", "walk me through what shipped", "explain the final code", or any shipping-workflow approval/merge gate — even if they don't say the words "brief" or "HTML".
+description: Generates a rich, visual HTML one-pager that lets a busy reviewer understand a body of changes and either approve a proposed PR stack or merge a finished one — without reading the diff themselves. Auto-detects whether the run is DRAFT (working-tree changes plus a proposed stack, pre-approval) or FINAL (a real PR stack with review complete, pre-merge). Leads with a TL;DR, surfaces the PR stack near the top, flags high-stakes changes (endpoints, auth, schema), then walks the reviewer through the important code as a numbered Code Tour with inline diff snippets. Use whenever someone wants to eyeball a change before approving or merging — "review the changes", "show me what changed", "summarize the diff / the branch / the stack", "what am I about to approve", "walk me through what shipped", "explain the final code", or any shipping-workflow approval/merge gate — even if they don't say the words "brief" or "HTML".
 ---
 
 # Brief
@@ -172,6 +172,7 @@ Before handing off, check the brief against its purpose:
 - Is every schema change accounted for line by line?
 - (FINAL) Inside each PR card, is every follow-up commit attributed to a cause and every skipped finding surfaced in its own warning-colored row — all on the card, not in a separate evolution section?
 - Did you claim a stack/review section that doesn't exist (or omit one that does)?
+- **Orphan check across the stack.** For every PR card, list the new top-level functions / components / exports it introduces, then verify each has at least one caller in the *same* PR's diff. Surface any orphan (introduced in PR N, first used in PR N+1) as a warning-colored row on the introducing PR's card — it means the PR added code "ahead of time" and the symbol should be moved down to the PR that first uses it. If a mermaid / dependency-graph visualization of the stack is rendered, orphan nodes show up as nodes with no incoming edge from anything else in the PR; call them out explicitly.
 - Anything padded? Tighten it.
 
 Then tell the user the brief is ready, where it is, and which mode you chose.

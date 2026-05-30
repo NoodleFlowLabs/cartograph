@@ -5,19 +5,19 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/advisor/SKILL.md",
-      "computedHash": "7071e9d8346386706a57aa28530fb96558ca40f0094860dc658113a2fd6e08f2"
+      "computedHash": "c63bac5bccd1c19a81fb89ef23f4faea0605e30409fdd75fea7a3322cb064560"
     },
     "brief": {
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/brief/SKILL.md",
-      "computedHash": "263f9da55daa5c78c9e41c0cc7b9a634051bace3310d7309c3f2feba668c5f81"
+      "computedHash": "687073ccbaf902903f471339743d5067bd740906400c60222532713d1f0391e4"
     },
     "deslop": {
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/deslop/SKILL.md",
-      "computedHash": "234379fc379c84d6d6848bf1b9f062dff24cbcbb110ca423ee1fe6fa14f6701c"
+      "computedHash": "84d085ed88dadb5d3b562731ba85065a0c00906b80d1f7f241583f3d52e2e945"
     },
     "frontend-design": {
       "source": "anthropics/skills",
@@ -34,13 +34,13 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/project-health-check/SKILL.md",
-      "computedHash": "9d44b10738f92e2cb427d87fed8c8ada25cd91d0c766533e166da987b16831c4"
+      "computedHash": "43680d45baff4551850d6bf0f4cb601af26808a9674eba4cf7542ac499979e63"
     },
     "ship": {
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "f7797e54505ae31f10f292ba7b4f7a1df4fc9ee1561fc917b9653254d6da2bc6"
+      "computedHash": "71a783bb554848ba61aba0b3f29b324bdd470f9ecf196846d7b2eab23e27bc08"
     },
     "skill-cleaner": {
       "source": "ilamanov/skills",

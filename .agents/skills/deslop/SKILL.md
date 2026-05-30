@@ -15,6 +15,7 @@ Check the diff against main and remove AI-generated slop introduced in the branc
 - **Deep nesting** - Deeply nested code that should be simplified with early returns
 - **Single-use variables** - Variables used once immediately after declaration; inline the RHS instead
 - **Single-use type definitions** - Separate type or interface definitions used in only one place (React props, function parameters, return types, etc.); inline the type directly where it's used
+- **Re-exports from another file** - There should be exactly one export of a thing, in the file that defines it. Don't re-export something defined elsewhere — whether the file is a pure barrel/pass-through or does real work alongside the re-exports. Drop the re-export lines and point importers at the defining module.
 - **Style drift** - Other patterns inconsistent with the file and surrounding codebase
 
 ## Guardrails
