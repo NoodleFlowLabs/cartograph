@@ -1,5 +1,3 @@
-# Agent Instructions
-
 ## Cartograph UI Stack
 
 The Cartograph UI is intentionally source-served. The runtime should be able to
