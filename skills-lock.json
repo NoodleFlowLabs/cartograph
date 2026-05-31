@@ -5,7 +5,7 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/advisor/SKILL.md",
-      "computedHash": "c63bac5bccd1c19a81fb89ef23f4faea0605e30409fdd75fea7a3322cb064560"
+      "computedHash": "e5d9a78e8c803e2b00bbdf03788788383967704ab07c547558f4131c5c451faf"
     },
     "brief": {
       "source": "ilamanov/skills",
@@ -40,13 +40,13 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "71a783bb554848ba61aba0b3f29b324bdd470f9ecf196846d7b2eab23e27bc08"
+      "computedHash": "0ca06e513ee5d7bac4fd66e1d6a39f7f9a1fd7bab057606a8f59d1b152697a51"
     },
     "skill-cleaner": {
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/skill-cleaner/SKILL.md",
-      "computedHash": "82d100a2ef04c45ae0c8321162f4c25610da184ce659f2ca68cdaeabdc11122a"
+      "computedHash": "8e013bd91e64538b4f2794824bf257769afe8699efadda215418c58758f374a7"
     },
     "skill-creator": {
       "source": "anthropics/skills",
