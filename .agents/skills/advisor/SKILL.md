@@ -112,6 +112,26 @@ Concrete example: *"resumable bulk import that picks up where it left off across
 
 When the proposed approach has one of those expensive shapes, name it explicitly and propose the simpler alternative before the ticket gets written around the complex shape. Once a ticket says "resumable", the implementer will build resumability — and the time to push back is gone. This is one of the highest-leverage moves the skill makes: a single question during shaping can cut weeks of implementation and review.
 
+### Trading completeness for a cheap assumption (the "cheap 80")
+
+A close cousin of the move above. Some requirements are expensive only because they're stated at full generality. Before building the general version, look for a simplifying assumption the user can genuinely live with — one that, once accepted, lets most of the value be delivered on a far cheaper surface. The target is ~80% of the value for ~10% of the effort.
+
+Offer it whenever a requirement is about to drag in a heavy subsystem — produce one, or a few, such tradeoffs and let the user pick the right one.
+
+How to generate one:
+
+1. **Name the expensive requirement and the surface it forces.** What does the full-generality version drag in — a new schema, a state machine, distributed coordination, background reconciliation?
+2. **Find the assumption that would let you drop it.** Usually an assumption about user behavior or environment: "the user is on one device," "files are under 10MB," "this runs once a day, not continuously." Write it down as an *explicit* assumption, not a silent one.
+3. **Enumerate exactly what breaks under that assumption — and confirm the user doesn't care.** List the cases the assumption fails in. If they're all true edge cases the user is happy to lose (and you've said so out loud, not glossed it), the assumption holds. If even one is load-bearing, the cheap version is wrong — drop it. This step is the whole discipline: a "cheap 80" that quietly sacrifices something load-bearing is just a bug.
+4. **Move the work to the surface that's trivially correct under the assumption.** Often this means pushing it off the expensive surface (backend, shared state) onto a cheap one (the client, a single request) where, given the assumption, it's nearly free.
+5. **Present it as an honest tradeoff:** "We give up X — which only matters when Y, and we've agreed we don't care about Y — and in exchange we delete subsystem Z." Offer one or a few; let the user pick. Don't smuggle the assumption in unstated.
+
+**Worked example.** A chat app runs one long task at a time. The user wants to keep sending messages while a task is in flight, without losing them. The general version is a backend *turn queue* — persist each message as pending, preserve ordering, drain the queue when the task finishes, plus a schema change to track queued turns. Stateful and expensive.
+
+Accept one assumption: the user stays on a single browser. Then the queue doesn't need a backend at all — the browser buffers the messages in local storage and submits them as one batch when the current task finishes. Because the buffer is persisted, it survives a refresh or tab close: a returning user still has the messages queued. The only thing lost is switching to a different browser or device — an edge case nobody cares about. The backend stays stateless (it genuinely has no queue); the client does the queuing before submission. Same experience for a fraction of the work, and the only thing still worth real care is preserving message order within the batch.
+
+The shape to hunt for: a behavioral assumption that lets an entire backend subsystem evaporate onto the client.
+
 ### Checking the request from multiple angles
 
 A quick pass through each functional lens often surfaces problems no single perspective would catch. Skip lenses that obviously don't apply, but don't skip them just because they're uncomfortable to think through:
@@ -229,4 +249,5 @@ After all tickets are created, report the issue IDs and URLs in proposal order, 
 - If `altitude=challenge-framing`: did I question priority, root cause, and whether to build at all — not only implementation?
 - If `output=tickets`: did I outline **all** prereqs with assigned dispositions — or only the obvious ones? Did I check whether the ticket bundles two independent concerns that should split?
 - Did I pressure-test the implementation complexity — propose a UX rebalance if the proposed approach is mechanically heavy?
+- Did I look for a "cheap 80" — a simplifying assumption that collapses an expensive requirement onto a cheaper surface — and name what it gives up?
 - If `output=spec-file`: could a stranger implement this without asking a clarifying question?
