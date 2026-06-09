@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Ships a Linear ticket end-to-end — selects the ticket (or reads the one the user named), optionally plans, implements in a fresh worktree, opens a Graphite stack of PRs, runs review loops, and merges after explicit user approval. Use when the user asks to "ship", "implement", or "pick up" a Linear ticket, or any end-to-end feature/bug ticket workflow. Holds the human in the loop at every approval gate.
+description: Ships work end-to-end into a Graphite PR stack with review loops and a human-approved merge. Two modes — from a Linear ticket (selects or reads the named ticket, optionally plans, implements in a fresh worktree), or from changes already made locally ("ship these changes as a PR") where it skips ticket creation/selection and goes straight to PR creation. Use when the user asks to "ship", "implement", or "pick up" a ticket, or to "ship these changes / open a PR" for existing local work. Holds the human in the loop at every approval gate.
 ---
 
 # Ship
@@ -8,6 +8,17 @@ description: Ships a Linear ticket end-to-end — selects the ticket (or reads t
 End-to-end Linear ticket → worktree → Graphite PR stack → review-agent loops → merge.
 
 This skill is paired with the `ticket` skill. Normally a Linear ticket already exists; this skill picks one up. If the user wants to ship something with no ticket yet, read the `ticket` skill and follow its workflow to create one before continuing.
+
+## Two entry modes
+
+How the skill was invoked determines whether a ticket is involved at all:
+
+- **Ticket mode (default).** The user names or asks you to pick up a Linear ticket ("ship FOO-123", "ship the feed-pagination ticket", "pick up a ticket"). Run the full flow starting at Step 1.
+- **Existing-changes mode.** The user points at work already done locally and just wants it shipped as a PR — e.g. **"ship these changes as a PR"**, "open a PR for what I've got", "ship this diff". This is invoked when code has already changed locally without starting from a ticket. In this mode:
+  - **Skip ticket creation and ticket selection entirely** — do **not** read the `ticket` skill, do **not** create a Linear ticket, and do **not** browse for one to attach. Only create or attach a ticket if the user explicitly asks for it in this invocation.
+  - **Skip the Linear steps** — Step 1 (Select ticket), the Linear status transitions, and the Linear progress log. There's no ticket, so there's nothing to move or comment on. PR bodies omit the `Closes <LINEAR-ID>` line (there's no id).
+  - **Jump to the PR flow.** Treat the existing working-tree changes as the implemented end state (the output of Step 5a) and continue from there: Step 5b (deslop), Step 5c (review the diff / decide on stack breakup), Step 5d (split into a stack), Step 6 (submit + review loop), and Step 7 (merge) — all unchanged.
+  - Everything else (approval gates, review loop, merge gate, screenshots, no-force-push rules) applies exactly as in ticket mode.
 
 ## Required tools
 
@@ -31,7 +42,7 @@ The agent never advances past these without explicit user confirmation ("yes", "
 
 ## Progress checklist
 
-Copy this into the response and tick as work progresses:
+Copy this into the response and tick as work progresses. In **existing-changes mode** (see "Two entry modes"), drop steps 1–3 and the Linear-status line in step 8 — start at step 4 (or 5b if the worktree is already the one holding the changes).
 
 ```
 - [ ] 1. Select ticket
@@ -52,6 +63,8 @@ Copy this into the response and tick as work progresses:
 
 ## Linear progress log
 
+> Skipped entirely in **existing-changes mode** — there's no ticket to comment on.
+
 Post a short comment to the Linear ticket via the Linear MCP at each milestone below. Comments are status entries, not transcripts — one or two lines plus links. Avoid logging chat-level back-and-forth.
 
 | Milestone                           | Comment content                                      |
@@ -64,6 +77,8 @@ Post a short comment to the Linear ticket via the Linear MCP at each milestone b
 | Merge complete (Step 7)             | merged PR URLs in order                              |
 
 ## Linear status transitions
+
+> Skipped entirely in **existing-changes mode** — there's no ticket to move.
 
 Move the ticket via the Linear MCP at each transition below. The workspace's available state names vary — look them up via the MCP and pick the closest semantic match.
 
@@ -153,6 +168,8 @@ Read affected code as needed and implement the full feature on the single workin
 
 **Hold migrations.** Don't generate migration files yet (Prisma `migrate dev`, Drizzle `drizzle-kit generate`, Rails `db:migrate`, Django `makemigrations`, etc.). Schema source files (`prisma/schema.prisma`, `db/schema.ts`, etc.) can change freely; numbered migrations are generated at merge time (Step 7) so they don't collide with parallel work.
 
+**Match backward-compat to the product — don't assume either way.** Backward-compatibility work — compat shims, legacy fallbacks, dual-writes, deprecation paths, data-backfill migrations — is the right call for some products and pure complexity for others, so figure out which this is before you add *or* omit it. An MVP/prototype with no production usage, no data persisted in the old shape, and no external callers wants a clean break: rename the function, change the contract, drop the old enum value, and don't write the bridge back to a past that isn't there. A product with real users, persisted data, or external API consumers wants the opposite — there a clean break loses data or breaks callers. Read the cues: a populated old-shape table, public API docs, or a ticket implying live users point toward preserving compatibility; an empty schema and "prototype" framing point toward a clean break. When the cues don't settle it, **ask the user which kind of product this is before building (or skipping) the compat path** — don't guess. Guessing wrong is costly in both directions: an unnecessary shim is complexity the user has to catch in review and ask you to strip back out, and a missing one can break real usage. This is the same judgment that governs review-finding triage in Step 6, applied earlier — at implementation time, before any reviewer flags it.
+
 ### 5b. Deslop the working tree (only if the `deslop` skill is present)
 
 If a `deslop` skill is available, run it against the working tree before reviewing the diff or splitting the stack. It removes AI-generated code patterns (unnecessary comments, defensive overkill, type escape hatches, single-use variables, separate prop interfaces, style drift) so reviewers see clean code on the first push instead of patterns that will inevitably show up as review-agent findings later. Cleaning here once is cheaper than fixing the same things across N PRs in the review loop.
@@ -165,7 +182,7 @@ If the skill isn't installed in this environment, skip this step — don't attem
 
 Inspect the working-tree diff against `main` (e.g. `git diff main --stat`, then read the changes including untracked files via `git status`). Group similar functionality into a thorough-but-concise stack proposal. One bullet per branch, in stack order. Each: branch slug, one-line summary, scope (small/medium), key files.
 
-**Slice by functionality, not by code shape.** Each PR should deliver an observable piece of the feature on its own. Helpers, types, and shared utilities ride along with the **first PR that uses them** — don't create a slice whose only content is plumbing for a later PR (e.g. "add X type", "extract Y helper for upcoming feature", "scaffolding for Z enforcement"). A standalone *refactor* PR is fine when the refactor itself is the deliverable (e.g. extracting an existing hook for reuse, renaming a module, splitting a file that's already overloaded) — but a *scaffolding* PR that only exists to make the next PR smaller is the wrong split. If you find yourself proposing "Account Helpers" → "Account Enforcement" → "Account UI," collapse them: the helpers land with whichever functional slice first calls them.
+**Slice by functionality, not by code shape.** Each PR should deliver an observable piece of the feature on its own. Helpers, types, and shared utilities ride along with the **first PR that uses them** — don't create a slice whose only content is plumbing for a later PR (e.g. "add X type", "extract Y helper for upcoming feature", "scaffolding for Z enforcement"). A standalone _refactor_ PR is fine when the refactor itself is the deliverable (e.g. extracting an existing hook for reuse, renaming a module, splitting a file that's already overloaded) — but a _scaffolding_ PR that only exists to make the next PR smaller is the wrong split. If you find yourself proposing "Account Helpers" → "Account Enforcement" → "Account UI," collapse them: the helpers land with whichever functional slice first calls them.
 
 ```md
 **Proposed PR stack** (3 PRs, bottom → top)
@@ -202,7 +219,7 @@ Replay the working-tree changes onto a clean Graphite stack so each branch conta
 1. **Preserve the implemented end state first** — the implementation is uncommitted and losing it costs the whole feature. Simplest options: `git stash --include-untracked`, or make a single snapshot commit on a parked branch (e.g. `git checkout -b <branch>-snapshot && git add -A && git commit -m "snapshot"` then return to the working branch).
 2. **Reset back to `main`** and build the stack branch by branch via Graphite. For each branch, apply only the slice of the diff that belongs on that branch (e.g. selective patch application from the snapshot).
 3. **Each branch must pass lint/typecheck/tests on its own**, with its parent branch in the stack as the base (not `main`). Each PR is reviewed and CI'd against its parent — Graphite restacks children onto `main` only as parents merge. So slice the work so every branch is self-contained relative to the stack: types, scaffolding, and dependencies introduced before the code that uses them. **Don't use `--no-verify`** — if a branch can't pass hooks, the slice is wrong; rework the breakup. This may mean re-proposing 5c to the user.
-4. **No "ahead of time" code — every newly introduced function, component, type, or export in a PR must be *used* (called, rendered, referenced) in that same PR.** It is not enough that a later PR in the stack will eventually use it. If a symbol is introduced in PR N but its first caller lives in PR N+1, move the symbol down to PR N+1 (where it's actually wired up). Reviewers cannot reason about dead code — they have to mentally hold "this exists for something coming later" across PRs, which is exactly the failure mode this rule prevents. Concretely: for each branch, check that every new top-level export/component/function it adds has at least one caller within that same branch's diff; a symbol with zero in-branch callers is an orphan — relocate it. **Exception: schema changes.** A standalone schema PR (e.g. DB schema + generated migration, with no in-PR callers of the new columns/tables yet) is fine and often preferable — schema lands cleanly on its own, gets reviewed for shape independently of feature code, and unblocks the feature PRs above it. The "must have a caller in this PR" rule applies to application code (functions, components, helpers, types used only in app code), not to schema/migration files.
+4. **No "ahead of time" code — every newly introduced function, component, type, or export in a PR must be _used_ (called, rendered, referenced) in that same PR.** It is not enough that a later PR in the stack will eventually use it. If a symbol is introduced in PR N but its first caller lives in PR N+1, move the symbol down to PR N+1 (where it's actually wired up). Reviewers cannot reason about dead code — they have to mentally hold "this exists for something coming later" across PRs, which is exactly the failure mode this rule prevents. Concretely: for each branch, check that every new top-level export/component/function it adds has at least one caller within that same branch's diff; a symbol with zero in-branch callers is an orphan — relocate it. **Exception: schema changes.** A standalone schema PR (e.g. DB schema + generated migration, with no in-PR callers of the new columns/tables yet) is fine and often preferable — schema lands cleanly on its own, gets reviewed for shape independently of feature code, and unblocks the feature PRs above it. The "must have a caller in this PR" rule applies to application code (functions, components, helpers, types used only in app code), not to schema/migration files.
 5. **Confirm equivalence at the end.** The cumulative diff of the top branch against `main` must match the preserved end state exactly: `git diff <top-branch> <snapshot>` should be empty. If it isn't, the split is wrong — fix before submitting.
 
 This reset-and-rebuild pattern (snapshot, `gt modify`, re-slice) is **5d-only** — it's safe because the stack isn't published yet. Once it's submitted, the rules change (see Step 6).
@@ -215,7 +232,7 @@ The review agent runs **remotely on the PR** — it's a GitHub-side bot that rea
 
 The active review agent for this project is **Codex** — the agent-specific bindings (latency, author name, retrigger command) live inside the loop below. To swap in a different review agent later, change only those bindings.
 
-Submit the stack via Graphite — one PR per branch, each opened as **ready for review** (not draft). Only fall back to draft if the user explicitly asks, or if something genuinely blocks the PR from being reviewable (e.g. a known-broken intermediate state the user wants to share for context). PR creation auto-triggers a review on each new PR.
+Submit the stack via Graphite — one PR per branch. **Always open every PR as ready for review — never as a draft.** Pass `--publish` explicitly when submitting non-interactively: `gt submit --no-interactive` opens new PRs as **drafts** by default, so `--publish` is required to avoid a wasteful "mark ready for review" round-trip that delays the auto-review. Never pass `--draft` (or Graphite's draft equivalent), and don't fall back to draft for intermediate/known-broken states; if a PR genuinely isn't ready, say so in chat and let the user decide rather than silently shipping a draft. This holds in both entry modes — including existing-changes mode, where the tendency to default to draft is strongest. PR creation auto-triggers a review on each new PR, so a draft would just stall the review loop.
 
 **Keep every PR green.** Checks run on creation and re-run on every push. Treat a red check like a review finding: read its logs — `gh pr checks` only lists which checks passed/failed (state, link, workflow), not the error output, so open the failing check's link or pull the actual log via the run (`gh run view <run-id> --log-failed`, or `--log`), then fix it with an additive commit (new commit, never amend/force), and push — watch checks on the same tick as review comments, and don't wait to be told. If a check is red for something only the user can fix (flaky infra, a user-controlled secret), say so and hand it over rather than looping.
 
@@ -225,7 +242,7 @@ Submit the stack via Graphite — one PR per branch, each opened as **ready for 
 
 For **each PR** (bottom-up), run this loop until either the PR is clean — CI checks green **and** no actionable review findings — **or** the user gives a merge signal (Step 7), whichever comes first:
 
-1. **Wait for the review** to post. Latency is agent-specific — for Codex, ~6–7 min is typical. If the harness exposes a periodic-watcher mechanism (recurring scheduled check, polling loop, cron-style wake), set one up to fetch the PR's comments at that cadence and surface anything new from the review agent. Otherwise fall back to a single delayed wake (e.g. `ScheduleWakeup` at ~400s, kept under the prompt-cache TTL) and re-arm after each fetch.
+1. **Wait for the review** to post — but **don't block-wait or hand it back to the user to ping you.** The moment the stack is submitted, proactively set up a watcher to fetch each PR's comments on a cadence and surface anything new; setting one up is the default, not something you do only when asked. Latency is agent-specific — for Codex, ~6–7 min is typical. Use whatever periodic-watcher mechanism the harness exposes: under **Codex this is the automation / scheduled-task system** — create a recurring automation that re-checks the PRs; under Claude Code it's a recurring scheduled check or polling loop. Only if no such mechanism is available, fall back to a single delayed wake (e.g. `ScheduleWakeup` at ~400s, kept under the prompt-cache TTL) and re-arm after each fetch.
 
    **Watcher lifecycle:** the watcher exists **to catch review findings and failing checks** — it is not responsible for waiting on the user's merge approval. Create it once when the stack is first submitted, and keep it running across all PRs and rounds while findings or check fixes are outstanding.
 
@@ -277,7 +294,7 @@ For **each PR** (bottom-up), run this loop until either the PR is clean — CI c
 6. **Act on the findings.**
 
    **For each Fix finding:**
-   - Make the change on the branch that owns the code as a **new commit** — one focused commit per finding, referencing it (`git commit` → `gt submit`). **Not `gt modify`/`git commit --amend`**: those rewrite the tip and force-push, squashing the fix into the prior commit and defeating the commit-by-commit review the user relies on. (`gt modify` is the `graphite` skill's default for shaping an *unsubmitted* stack — not for review fixes.) A commit on top is a fast-forward; only Graphite's automatic child-restack force-pushes, and you never invoke it.
+   - Make the change on the branch that owns the code as a **new commit** — one focused commit per finding, referencing it (`git commit` → `gt submit`). **Not `gt modify`/`git commit --amend`**: those rewrite the tip and force-push, squashing the fix into the prior commit and defeating the commit-by-commit review the user relies on. (`gt modify` is the `graphite` skill's default for shaping an _unsubmitted_ stack — not for review fixes.) A commit on top is a fast-forward; only Graphite's automatic child-restack force-pushes, and you never invoke it.
    - **After each fix commit lands on the PR (i.e. is pushed):**
      1. Post a top-level PR comment summarizing the fix:
         ```bash
@@ -299,6 +316,10 @@ For **each PR** (bottom-up), run this loop until either the PR is clean — CI c
    - **Update the PR description** to record the explicit skip so future review rounds don't resurface it. Maintain a `## Explicit skips` section at the bottom of the PR body and append a bullet for each skip: `<one-line finding summary> — <reason>` with a link to the finding comment. Edit the PR body via:
      ```bash
      gh pr edit <num> --body "$(updated body)"
+     ```
+     If `gh pr edit` fails with a GitHub *"Projects (classic) is being deprecated"* GraphQL error, don't treat it as a dead end — `gh pr edit` resolves classic-project fields and errors out account-wide once classic projects are sunset, so retrying it won't help. Edit the body (and title) via the REST API instead, which avoids that path:
+     ```bash
+     gh api -X PATCH repos/{owner}/{repo}/pulls/<num> -F body=@<file>   # add -f title="..." to also change the title
      ```
      The section serves as durable context for the review agent on the next pass.
 
@@ -359,6 +380,7 @@ Short summary: ticket id, merged PR URLs, review findings skipped + reasons.
 - **Never force-push. This is a hard rule, not a default.** Do not run `git push --force` / `--force-with-lease`, and do not pass any force/squash flag to Graphite (`gt submit --force`, `gt submit --squash`, or equivalent). The **only** force-push allowed is the implicit one Graphite performs on its own during a `restack` to realign a branch onto its updated parent — that is internal to Graphite's stacking and you never invoke it directly. If a push is rejected as non-fast-forward, **stop and ask the user** — do not reach for `--force` to get past it.
   - **Why this matters to the user:** force-pushing rewrites the branch and collapses the work into a single squashed commit, destroying the per-commit history. The user reviews changes **commit by commit** and needs every incremental change to remain a distinct, inspectable commit on the PR. A force-push throws that away. Each implementation step and each review-finding fix must stay as its own commit (see Step 6, point 6) — pushed additively, never rewritten.
 - No `--no-verify` unless the user asks.
+- **Never create PRs in draft mode.** Every PR is opened ready for review — no `--draft` / Graphite draft flag — in both entry modes (see Step 6).
 - Review-finding fixes always land as separate commits on the PR branch — a new commit and `gt submit`, **never `gt modify`**/amend/squash unless the user explicitly asks. (`gt modify` is the `graphite` skill's default for shaping an unsubmitted stack; it doesn't apply once the stack is in review.)
 - If the plan turns out wrong mid-implementation, stop and re-confirm with the user.
 - If Linear MCP is unreachable mid-flow, surface the would-be status change in chat and ask the user to update Linear.
