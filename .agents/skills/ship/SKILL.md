@@ -105,11 +105,13 @@ Either way, **filter conflicts** before settling on the ticket:
 - Scope overlap with any other Linear issue currently `In Progress` / `In Review`.
 - Overlap with any **non-stale** open PR — `gh pr list --state open --json number,title,updatedAt,headRefName,labels`. Stale = no commits in ~14 days; treat stale PRs as abandoned.
 
+**PR overlap is a lead, not a conflict.** Touching the same file as an open PR rarely blocks anything — inspect its diff (`gh pr diff <num>`) and gate **only** if the two changes rework the same logic, the PR restructures code this ticket builds on, or the ticket depends on the PR's change. Otherwise proceed from `main` with a one-line note; trivial rebase conflicts get resolved later. "Might conflict" is not a reason to stop.
+
 **Only stop for user input when there's genuine ambiguity.** If the user named a specific ticket and no blocking conflicts surfaced, **proceed directly to Step 2** — don't ask for redundant confirmation. Stop only when:
 
 - No ticket was specified, or
 - The user's phrase matches more than one candidate, or
-- The chosen ticket has a real conflict (unfinished dependency, scope overlap with an in-flight ticket, or a non-stale open PR on the same area).
+- The chosen ticket has a real conflict (unfinished dependency, scope overlap with an in-flight ticket, or a **verified entanglement** with a non-stale open PR per the inspection above — never mere file overlap).
 
 In any of those cases, present 3–5 candidates with one-line summaries (or surface the specific conflict) and wait for the user to pick or resolve.
 
