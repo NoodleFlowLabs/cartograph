@@ -1,5 +1,4678 @@
-import { render } from 'preact'
-import { html } from './lib/html.js'
-import { App } from './app.js'
+// -- State --
+let DATA = null;
+let currentTab = "overview";
+let selectedEntityId = null;
+let selectedFlowId = null;
+let selectedSurfaceId = null;
+let selectedFeatureId = null;
+let selectedCompartmentId = null;
+let codemapView = "tree"; // 'tree' or 'graph'
+let expandedCompartments = {}; // id -> bool
+let selectedFileTreePath = null;
+let expandedFileTreeDirs = {}; // dirPath -> bool
+let fileTreeColorMap = {}; // featureId -> color
+let fileTreeHighlightedFeature = null;
+let fileTreeLegendCollapsed = false;
+let searchQuery = "";
+let engHealthMetricId = null;
+let engHealthHoveredFindingKey = null;
+let engHealthActiveFindingKey = null;
+let expandedInvariantId = null;
+const ENG_TABS = new Set([
+  "techstack",
+  "featuremap",
+  "datamodel",
+  "codeorg",
+  "codehealth",
+]);
+const TAB_PANEL_MAP = {
+  overview: "overview-panel",
+  surfaces: "surfaces-panel",
+  features: "features-panel",
+  flows: "flows-panel",
+  invariants: "invariants-panel",
+  techstack: "techstack-panel",
+  featuremap: "filetree-panel",
+  datamodel: "entities-panel",
+  codeorg: "codemap-panel",
+  codehealth: "codehealth-panel",
+};
+const NO_SIDEBAR_TABS = new Set([
+  "overview",
+  "techstack",
+  "codehealth",
+  "invariants",
+]);
+const DEAD_CODE_KIND_ORDER = [
+  "dead-file",
+  "test-only-file",
+  "orphaned-surface",
+  "orphaned-feature",
+  "dead-entity",
+];
+const DEAD_CODE_KIND_LABELS = {
+  "dead-file": "Dead Files",
+  "test-only-file": "Test-Only Files",
+  "orphaned-surface": "Orphaned Surfaces",
+  "orphaned-feature": "Orphaned Features",
+  "dead-entity": "Dead Entities",
+};
 
-render(html`<${App} />`, document.getElementById('root'))
+// -- Computed: entity -> surface mapping --
+let entitySurfaceMap = {}; // entityId -> [surfaceId, ...]
+
+function esc(str) {
+  if (!str) return "";
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function getCodeHealthMetrics() {
+  return DATA && DATA.codeHealth && Array.isArray(DATA.codeHealth.metrics)
+    ? DATA.codeHealth.metrics
+    : [];
+}
+
+// -- Invariants helpers --
+function getInvariantsData() {
+  return DATA && DATA.invariants && Array.isArray(DATA.invariants.results)
+    ? DATA.invariants
+    : null;
+}
+
+function getInvariantsSorted() {
+  const inv = getInvariantsData();
+  if (!inv) return [];
+  const severityOrder = { critical: 0, high: 1, low: 2 };
+  const statusOrder = { fail: 0, pass: 1, skipped: 2 };
+  return [...inv.results].sort((a, b) => {
+    const statusDiff =
+      (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+    if (statusDiff !== 0) return statusDiff;
+    return (
+      (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9)
+    );
+  });
+}
+
+function toggleInvariantExpand(id) {
+  expandedInvariantId = expandedInvariantId === id ? null : id;
+  renderInvariantsTab();
+}
+
+function getInvariantPrompt(result) {
+  if (result.status === "fail" && result.fixPrompt)
+    return result.fixPrompt;
+  return result.verificationPrompt || null;
+}
+
+function getInvariantPromptLabel(result) {
+  if (result.status === "fail" && result.fixPrompt) return "Fix Prompt";
+  return "Verification Prompt";
+}
+
+function copyInvariantPrompt(id) {
+  const inv = getInvariantsData();
+  if (!inv) return;
+  const result = inv.results.find((r) => r.id === id);
+  const prompt = result ? getInvariantPrompt(result) : null;
+  if (prompt) {
+    navigator.clipboard.writeText(prompt).then(() => {
+      const btn = document.querySelector(`[data-copy-invariant="${id}"]`);
+      if (btn) {
+        btn.textContent = "Copied!";
+        setTimeout(() => {
+          btn.textContent = "Copy";
+        }, 1500);
+      }
+    });
+  }
+}
+
+function getMetricState(metric) {
+  const thresholds = metric.thresholds || {};
+  const green =
+    typeof thresholds.green === "number" ? thresholds.green : 90;
+  const yellow =
+    typeof thresholds.yellow === "number" ? thresholds.yellow : 70;
+  if (metric.score >= green) return "green";
+  if (metric.score >= yellow) return "yellow";
+  return "red";
+}
+
+function getMetricById(metricId) {
+  return (
+    getCodeHealthMetrics().find((metric) => metric.id === metricId) ||
+    null
+  );
+}
+
+function ensureEngHealthMetricSelection() {
+  const metrics = getCodeHealthMetrics();
+  if (!metrics.length) {
+    engHealthMetricId = null;
+    engHealthHoveredFindingKey = null;
+    engHealthActiveFindingKey = null;
+    return;
+  }
+
+  if (
+    engHealthMetricId &&
+    metrics.some((metric) => metric.id === engHealthMetricId)
+  ) {
+    return;
+  }
+
+  const sorted = [...metrics].sort((a, b) => a.score - b.score);
+  engHealthMetricId = (sorted[0] || metrics[0]).id;
+}
+
+function getHealthFindingKey(metricId, findingIndex) {
+  return `${metricId}:${findingIndex}`;
+}
+
+function getActiveHealthFindingRef() {
+  const key = engHealthHoveredFindingKey || engHealthActiveFindingKey;
+  if (!key) return null;
+  const [metricId, indexText] = key.split(":");
+  const metric = getMetricById(metricId);
+  if (!metric) return null;
+  const index = Number(indexText);
+  if (Number.isNaN(index) || !metric.findings || !metric.findings[index])
+    return null;
+  return {
+    key,
+    metric,
+    finding: metric.findings[index],
+    findingIndex: index,
+  };
+}
+
+function normalizeHealthPath(path) {
+  return String(path || "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/\/+$/, "");
+}
+
+function pathsOverlap(left, right) {
+  const a = normalizeHealthPath(left);
+  const b = normalizeHealthPath(right);
+  if (!a || !b) return false;
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+function getDeadCodeKindLabel(kind) {
+  return DEAD_CODE_KIND_LABELS[kind] || kind || "Unknown";
+}
+
+function getDeadCodeSurfaceTarget(finding) {
+  if (!DATA || !Array.isArray(DATA.surfaces) || !finding) return null;
+  const route =
+    finding.evidence && typeof finding.evidence.route === "string"
+      ? finding.evidence.route
+      : null;
+  return (
+    DATA.surfaces.find(
+      (surface) =>
+        surface.id === finding.target ||
+        (route &&
+          surface.entrypoint &&
+          surface.entrypoint.route === route) ||
+        (typeof finding.target === "string" &&
+          finding.target.startsWith("/") &&
+          surface.entrypoint &&
+          surface.entrypoint.route === finding.target),
+    ) || null
+  );
+}
+
+function getDeadCodeFeatureTarget(finding) {
+  if (!DATA || !Array.isArray(DATA.features) || !finding) return null;
+  return (
+    DATA.features.find((feature) => feature.id === finding.target) || null
+  );
+}
+
+function getDeadCodeEntityTarget(finding) {
+  if (!DATA || !Array.isArray(DATA.entities) || !finding) return null;
+  return (
+    DATA.entities.find((entity) => entity.id === finding.target) || null
+  );
+}
+
+function getFindingTargets(metricId, finding) {
+  const paths = new Set();
+
+  function addPath(value) {
+    const normalized = normalizeHealthPath(value);
+    if (normalized) paths.add(normalized);
+  }
+
+  if (!finding || typeof finding !== "object") return [];
+
+  if (finding.file) addPath(finding.file);
+  if (Array.isArray(finding.files)) finding.files.forEach(addPath);
+  if (Array.isArray(finding.consumers))
+    finding.consumers.forEach(addPath);
+  if (Array.isArray(finding.implementations)) {
+    finding.implementations.forEach((implementation) => {
+      if (!implementation) return;
+      addPath(implementation.location || implementation.file);
+    });
+  }
+
+  if (
+    metricId === "co-location" &&
+    finding.recommendation &&
+    finding.recommendation.target
+  ) {
+    addPath(finding.recommendation.target);
+  }
+
+  if (metricId === "dead-code") {
+    const evidence = finding.evidence || {};
+
+    if (
+      finding.kind === "dead-file" ||
+      finding.kind === "test-only-file"
+    ) {
+      addPath(finding.target);
+      if (Array.isArray(evidence.importers))
+        evidence.importers.forEach(addPath);
+    }
+
+    if (finding.kind === "orphaned-feature") {
+      const feature = getDeadCodeFeatureTarget(finding);
+      const implementationFiles = Array.isArray(
+        evidence.implementationFiles,
+      )
+        ? evidence.implementationFiles
+        : Array.isArray(feature && feature.implementations)
+          ? feature.implementations
+              .map(
+                (implementation) => implementation && implementation.file,
+              )
+              .filter(Boolean)
+          : [];
+      implementationFiles.forEach(addPath);
+    }
+
+    if (finding.kind === "orphaned-surface") {
+      const surface = getDeadCodeSurfaceTarget(finding);
+      if (surface && surface.entrypoint && surface.entrypoint.file) {
+        addPath(surface.entrypoint.file);
+      }
+    }
+
+    if (finding.kind === "dead-entity") {
+      const entity = getDeadCodeEntityTarget(finding);
+      if (entity && entity.source && entity.source.file) {
+        addPath(entity.source.file);
+      }
+    }
+  }
+
+  return [...paths];
+}
+
+function getActiveHealthTargets() {
+  const active = getActiveHealthFindingRef();
+  if (!active) return [];
+  return getFindingTargets(active.metric.id, active.finding);
+}
+
+function getActiveHealthCompartmentIds() {
+  const activeTargets = getActiveHealthTargets();
+  if (!activeTargets.length) return [];
+
+  const ids = new Set();
+  (DATA.compartments || []).forEach((compartment) => {
+    const files = compartment.files || [];
+    if (
+      files.some((file) =>
+        activeTargets.some((target) => pathsOverlap(file.file, target)),
+      )
+    ) {
+      ids.add(compartment.id);
+    }
+  });
+  return [...ids];
+}
+
+function isFilePathHighlightedByHealth(path) {
+  return getActiveHealthTargets().some((target) =>
+    pathsOverlap(path, target),
+  );
+}
+
+function isCompartmentHighlightedByHealth(compartmentId) {
+  return getActiveHealthCompartmentIds().includes(compartmentId);
+}
+
+function hasNavigableHealthTargets(metricId, finding) {
+  return getFindingTargets(metricId, finding).length > 0;
+}
+
+function renderHealthNavActions(metric, finding) {
+  const hasTargets = hasNavigableHealthTargets(metric.id, finding);
+  return `
+    <div class="codehealth-nav-actions">
+<button class="codehealth-nav-btn" type="button" onclick="navigateToFindingInTab('codeorg')"${hasTargets ? "" : " disabled"}>View in Code Organization →</button>
+<button class="codehealth-nav-btn" type="button" onclick="navigateToFindingInTab('featuremap')"${hasTargets ? "" : " disabled"}>View in Feature Map →</button>
+    </div>
+    ${hasTargets ? "" : '<div class="detail-desc">No file-backed targets available for cross-tab navigation.</div>'}
+  `;
+}
+
+function renderDeadCodeEvidence(finding) {
+  const evidence = finding.evidence || {};
+
+  if (finding.kind === "dead-file" || finding.kind === "test-only-file") {
+    const importers = Array.isArray(evidence.importers)
+      ? evidence.importers
+      : [];
+    return `
+<div class="codehealth-detail-section">
+  <div class="codehealth-detail-section-title">Importers</div>
+  ${
+    importers.length
+      ? `
+    <div class="codehealth-detail-list">
+      ${importers
+        .map(
+          (importer) => `
+        <div class="codehealth-detail-item">
+          <div class="codehealth-detail-item-title">${importer}</div>
+        </div>
+      `,
+        )
+        .join("")}
+    </div>
+  `
+      : '<div class="detail-desc">No importers found.</div>'
+  }
+</div>
+    `;
+  }
+
+  if (finding.kind === "orphaned-surface") {
+    const navigationReferences = Array.isArray(
+      evidence.navigationReferences,
+    )
+      ? evidence.navigationReferences
+      : [];
+    return `
+<div class="codehealth-detail-section">
+  <div class="codehealth-detail-section-title">Evidence</div>
+  <div class="codehealth-detail-item">
+    <div class="codehealth-detail-item-title">Route</div>
+    <div class="codehealth-detail-item-copy">${evidence.route || "Unknown route"}</div>
+  </div>
+  <div class="codehealth-detail-item" style="margin-top:10px;">
+    <div class="codehealth-detail-item-title">Navigation References</div>
+    ${
+      navigationReferences.length
+        ? `<div class="codehealth-detail-item-copy">${navigationReferences.join(", ")}</div>`
+        : '<div class="codehealth-detail-item-copy">No inbound navigation references found.</div>'
+    }
+  </div>
+</div>
+    `;
+  }
+
+  if (finding.kind === "orphaned-feature") {
+    const surfaceIds = Array.isArray(evidence.surfaceIds)
+      ? evidence.surfaceIds
+      : [];
+    const implementationFiles = Array.isArray(
+      evidence.implementationFiles,
+    )
+      ? evidence.implementationFiles
+      : [];
+    return `
+<div class="codehealth-detail-section">
+  <div class="codehealth-detail-section-title">Evidence</div>
+  <div class="codehealth-detail-list">
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">Surface IDs</div>
+      <div class="codehealth-detail-item-copy">${surfaceIds.length ? surfaceIds.join(", ") : "None"}</div>
+    </div>
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">All Surfaces Orphaned</div>
+      <div class="codehealth-detail-item-copy">${evidence.allSurfacesOrphaned ? "Yes" : "No"}</div>
+    </div>
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">All Implementations Dead</div>
+      <div class="codehealth-detail-item-copy">${evidence.allImplementationsDead ? "Yes" : "No"}</div>
+    </div>
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">Implementation Files</div>
+      <div class="codehealth-detail-item-copy">${implementationFiles.length ? implementationFiles.join(", ") : "None"}</div>
+    </div>
+  </div>
+</div>
+    `;
+  }
+
+  if (finding.kind === "dead-entity") {
+    const referencingOperations = Array.isArray(
+      evidence.referencingOperations,
+    )
+      ? evidence.referencingOperations
+      : [];
+    const referencingFeatures = Array.isArray(
+      evidence.referencingFeatures,
+    )
+      ? evidence.referencingFeatures
+      : [];
+    return `
+<div class="codehealth-detail-section">
+  <div class="codehealth-detail-section-title">Evidence</div>
+  <div class="codehealth-detail-list">
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">Entity Kind</div>
+      <div class="codehealth-detail-item-copy">${evidence.entityKind || "Unknown"}</div>
+    </div>
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">Referencing Operations</div>
+      <div class="codehealth-detail-item-copy">${referencingOperations.length ? referencingOperations.join(", ") : "None"}</div>
+    </div>
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">Referencing Features</div>
+      <div class="codehealth-detail-item-copy">${referencingFeatures.length ? referencingFeatures.join(", ") : "None"}</div>
+    </div>
+    <div class="codehealth-detail-item">
+      <div class="codehealth-detail-item-title">Prisma Query Count</div>
+      <div class="codehealth-detail-item-copy">${typeof evidence.prismaQueryCount === "number" ? evidence.prismaQueryCount : 0}</div>
+    </div>
+  </div>
+</div>
+    `;
+  }
+
+  return "";
+}
+
+function renderCodeHealthFindings(metric, findings) {
+  if (!findings.length) {
+    return `<div class="eng-health-empty">${getEmptyMetricMessage(metric)}</div>`;
+  }
+
+  if (metric.id !== "dead-code") {
+    return findings
+      .map((finding, index) =>
+        renderEngHealthFindingCard(metric, finding, index),
+      )
+      .join("");
+  }
+
+  const indexedFindings = findings.map((finding, index) => ({
+    finding,
+    index,
+  }));
+  const grouped = [];
+
+  DEAD_CODE_KIND_ORDER.forEach((kind) => {
+    const items = indexedFindings.filter(
+      (item) => item.finding.kind === kind,
+    );
+    if (items.length) grouped.push({ kind, items });
+  });
+
+  indexedFindings.forEach((item) => {
+    if (!DEAD_CODE_KIND_ORDER.includes(item.finding.kind)) {
+      grouped.push({ kind: item.finding.kind || "other", items: [item] });
+    }
+  });
+
+  return grouped
+    .map(
+      (group) => `
+    <div class="codehealth-finding-group">
+<div class="codehealth-finding-group-title">
+  <span>${getDeadCodeKindLabel(group.kind)}</span>
+  <span>${group.items.length}</span>
+</div>
+${group.items.map(({ finding, index }) => renderEngHealthFindingCard(metric, finding, index)).join("")}
+    </div>
+  `,
+    )
+    .join("");
+}
+
+function doesCompartmentTreeContainHealthHighlight(compartmentId) {
+  if (isCompartmentHighlightedByHealth(compartmentId)) return true;
+  return getCompartmentChildren(compartmentId).some((child) =>
+    doesCompartmentTreeContainHealthHighlight(child.id),
+  );
+}
+
+function refreshEngHealthHighlights() {
+  if (currentTab === "overview") renderOverview();
+  if (currentTab === "codehealth") renderCodeHealthTab();
+  refreshEngHealthTargetsOnly();
+}
+
+function refreshEngHealthTargetsOnly() {
+  renderSidebar();
+
+  if (currentTab === "overview") {
+    renderOverview();
+    return;
+  }
+
+  if (currentTab === "featuremap") {
+    renderFileTreeContent();
+    return;
+  }
+
+  if (currentTab === "codeorg") {
+    if (codemapView === "graph") {
+      renderCodemapGraph();
+    } else if (selectedCompartmentId) {
+      renderCompartmentDetail(selectedCompartmentId);
+    }
+    return;
+  }
+
+  if (currentTab === "datamodel") {
+    renderEntityMap();
+    if (selectedEntityId) selectEntity(selectedEntityId);
+    return;
+  }
+
+  if (currentTab === "codehealth") {
+    renderCodeHealthContent();
+  }
+}
+
+function selectEngHealthMetric(metricId) {
+  engHealthMetricId = metricId;
+  if (
+    engHealthActiveFindingKey &&
+    !engHealthActiveFindingKey.startsWith(`${metricId}:`)
+  ) {
+    engHealthActiveFindingKey = null;
+  }
+  if (
+    engHealthHoveredFindingKey &&
+    !engHealthHoveredFindingKey.startsWith(`${metricId}:`)
+  ) {
+    engHealthHoveredFindingKey = null;
+  }
+  refreshEngHealthHighlights();
+}
+
+function setEngHealthHoveredFinding(findingKey) {
+  engHealthHoveredFindingKey = findingKey;
+  refreshEngHealthTargetsOnly();
+}
+
+function clearEngHealthHoveredFinding() {
+  if (!engHealthHoveredFindingKey) return;
+  engHealthHoveredFindingKey = null;
+  refreshEngHealthTargetsOnly();
+}
+
+function toggleEngHealthFinding(findingKey) {
+  engHealthActiveFindingKey =
+    engHealthActiveFindingKey === findingKey ? null : findingKey;
+  if (
+    currentTab === "codeorg" &&
+    engHealthActiveFindingKey &&
+    !selectedCompartmentId &&
+    getActiveHealthCompartmentIds().length
+  ) {
+    codemapView = "graph";
+  }
+  refreshEngHealthHighlights();
+}
+
+function renderEngHealthFindingCard(metric, finding, index) {
+  const findingKey = getHealthFindingKey(metric.id, index);
+  const isActive = findingKey === engHealthActiveFindingKey;
+  const isHovered = findingKey === engHealthHoveredFindingKey;
+  const cardClasses = [
+    "eng-health-finding-card",
+    isActive ? "active" : "",
+    isHovered ? "hovered" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (metric.id === "co-location") {
+    const consumers = Array.isArray(finding.consumers)
+      ? finding.consumers
+      : [];
+    const consumerPreview = consumers.slice(0, 2).join(", ");
+    const remainingConsumers =
+      consumers.length > 2 ? ` (+${consumers.length - 2} more)` : "";
+    const recommendation = finding.recommendation
+      ? `${finding.recommendation.action || "move"} -> ${finding.recommendation.target || "review target"}`
+      : null;
+
+    return `
+<div class="${cardClasses}" data-finding-key="${findingKey}">
+  <div class="eng-health-finding-title">${finding.file || "Unspecified file"}</div>
+  <div class="eng-health-finding-body">${finding.reason || "This file appears to be misplaced."}</div>
+  ${consumerPreview ? `<div class="eng-health-finding-meta">Consumers: ${consumerPreview}${remainingConsumers}</div>` : ""}
+  ${recommendation ? `<div class="eng-health-finding-reco">${recommendation}</div>` : ""}
+</div>
+    `;
+  }
+
+  if (metric.id === "dryness") {
+    const implementations = Array.isArray(finding.implementations)
+      ? finding.implementations
+      : [];
+    const sharedLogic = Array.isArray(finding.sharedLogic)
+      ? finding.sharedLogic
+      : [];
+    const recommendation = finding.recommendation
+      ? `${finding.recommendation.action || "extract"} -> ${finding.recommendation.target || "shared module"}`
+      : null;
+
+    return `
+<div class="${cardClasses}" data-finding-key="${findingKey}">
+  <div class="eng-health-finding-title">
+    ${finding.severity ? `<span class="eng-health-severity eng-health-severity-${finding.severity}">${finding.severity}</span>` : ""}
+    ${finding.title || "Duplication finding"}
+  </div>
+  ${
+    implementations.length
+      ? `<div class="eng-health-finding-meta">${implementations
+          .slice(0, 2)
+          .map((item) => item.location)
+          .join(
+            ", ",
+          )}${implementations.length > 2 ? ` (+${implementations.length - 2} more)` : ""}</div>`
+      : ""
+  }
+  ${sharedLogic.length ? `<div class="eng-health-finding-body">Shared logic: ${sharedLogic.slice(0, 3).join(", ")}${sharedLogic.length > 3 ? ", ..." : ""}</div>` : ""}
+  ${recommendation ? `<div class="eng-health-finding-reco">${recommendation}</div>` : ""}
+</div>
+    `;
+  }
+
+  if (metric.id === "dead-code") {
+    const recommendation = finding.recommendation
+      ? `${finding.recommendation.action || "review"}: ${finding.recommendation.detail || "Inspect this finding"}`
+      : null;
+
+    return `
+<div class="${cardClasses}" data-finding-key="${findingKey}">
+  <div class="eng-health-finding-title">
+    ${finding.severity ? `<span class="eng-health-severity eng-health-severity-${finding.severity}">${finding.severity}</span>` : ""}
+    ${finding.target || "Dead code finding"}
+  </div>
+  <div class="eng-health-finding-meta">${getDeadCodeKindLabel(finding.kind)}</div>
+  ${finding.reason ? `<div class="eng-health-finding-body">${finding.reason}</div>` : ""}
+  ${recommendation ? `<div class="eng-health-finding-reco">${recommendation}</div>` : ""}
+</div>
+    `;
+  }
+
+  return `
+    <div class="${cardClasses}" data-finding-key="${findingKey}">
+<div class="eng-health-finding-title">${finding.title || finding.file || `${metric.name} finding ${index + 1}`}</div>
+${finding.reason ? `<div class="eng-health-finding-body">${finding.reason}</div>` : ""}
+    </div>
+  `;
+}
+
+function getEmptyMetricMessage(metric) {
+  if (!metric) return "No code health data available.";
+  if (metric.id === "co-location")
+    return "All files correctly co-located.";
+  if (metric.id === "dryness") return "No duplication found.";
+  if (metric.id === "dead-code") return "No dead code findings.";
+  return "No findings for this metric.";
+}
+
+function renderEngHealthFocusNotice(kind) {
+  const active = getActiveHealthFindingRef();
+  if (!active) return "";
+
+  if (kind === "codeorg") {
+    const compartmentIds = getActiveHealthCompartmentIds();
+    const compartments = compartmentIds
+      .map((id) =>
+        (DATA.compartments || []).find(
+          (compartment) => compartment.id === id,
+        ),
+      )
+      .filter(Boolean);
+
+    if (!compartments.length) return "";
+
+    return `
+<div class="eng-health-summary" style="margin-bottom:18px;">
+  <div class="eng-health-summary-title">Code health focus</div>
+  <div class="eng-health-summary-copy" style="margin-bottom:8px;">${active.metric.name}: ${(active.finding.title || active.finding.file || active.finding.reason || "").trim()}</div>
+  <div style="display:flex;flex-wrap:wrap;gap:4px;">
+    ${compartments.map((compartment) => `<span class="codemap-dep-link" onclick="selectCompartment('${compartment.id}')">${compartment.name}</span>`).join("")}
+  </div>
+</div>
+    `;
+  }
+
+  if (kind === "featuremap") {
+    const targets = getActiveHealthTargets();
+    if (!targets.length) return "";
+
+    return `
+<div class="eng-health-summary" style="margin-bottom:18px;">
+  <div class="eng-health-summary-title">Code health focus</div>
+  <div class="eng-health-summary-copy">${active.metric.name}: ${(active.finding.title || active.finding.file || active.finding.reason || "").trim()}</div>
+  <div class="eng-health-finding-reco" style="margin-top:8px;">${targets.slice(0, 4).join("<br>")}${targets.length > 4 ? "<br>..." : ""}</div>
+</div>
+    `;
+  }
+
+  return "";
+}
+
+function getTrackedFileCount() {
+  if (Array.isArray(DATA.fileTree) && DATA.fileTree.length) {
+    return DATA.fileTree.length;
+  }
+
+  const files = new Set();
+  (DATA.compartments || []).forEach((compartment) => {
+    (compartment.files || []).forEach((file) => {
+      if (file && file.file) files.add(file.file);
+    });
+  });
+  return files.size;
+}
+
+function openCodeHealthMetric(metricId) {
+  engHealthMetricId = metricId;
+  engHealthActiveFindingKey = null;
+  engHealthHoveredFindingKey = null;
+  switchTab("codehealth");
+}
+
+function renderOverview() {
+  const content = document.getElementById("overview-content");
+  if (!content) return;
+
+  const metrics = getCodeHealthMetrics();
+  const statCards = [
+    ["Surfaces", (DATA.surfaces || []).length],
+    ["Features", (DATA.features || []).length],
+    ["Entities", (DATA.entities || []).length],
+    ["Flows", (DATA.flows || []).length],
+    ["Files", getTrackedFileCount()],
+  ];
+
+  const featureKindOrder = [
+    "tool",
+    "interaction",
+    "transaction",
+    "gate",
+    "infrastructure",
+    "workflow",
+  ];
+  const featuresByKind = featureKindOrder
+    .map((kind) => [
+      kind,
+      (DATA.features || []).filter((feature) => feature.kind === kind),
+    ])
+    .filter(([, items]) => items.length);
+
+  const flows = DATA.flows || [];
+  const highlightedFlows = flows.slice(0, 8);
+
+  content.innerHTML = `
+    <div class="overview-stack">
+<section>
+  <div class="overview-stats-grid">
+    ${statCards
+      .map(
+        ([label, value]) => `
+      <div class="overview-stat-card">
+        <div class="overview-stat-value">${value}</div>
+        <div class="overview-stat-label">${label}</div>
+      </div>
+    `,
+      )
+      .join("")}
+  </div>
+</section>
+
+${
+  metrics.length
+    ? `
+  <section>
+    <div class="overview-health-strip">
+      <div class="overview-health-metrics">
+        ${metrics
+          .map(
+            (metric) => `
+          <div class="overview-health-metric" onclick="openCodeHealthMetric('${metric.id}')">
+            <span class="eng-health-score-dot metric-state-${getMetricState(metric)}"></span>
+            <span>${metric.name} ${Math.round(metric.score)}%</span>
+          </div>
+        `,
+          )
+          .join("")}
+      </div>
+      <div class="overview-health-link" onclick="switchTab('codehealth')">View →</div>
+    </div>
+  </section>
+`
+    : ""
+}
+
+${
+  getInvariantsData()
+    ? (() => {
+        const inv = getInvariantsData();
+        const s = inv.summary || {};
+        const allPass = s.failing === 0 && s.total > 0;
+        return `
+        <section>
+          <div class="overview-health-strip">
+            <div class="overview-health-metrics">
+              <div class="overview-health-metric" onclick="switchTab('invariants')">
+                <span class="eng-health-score-dot metric-state-${allPass ? "green" : "red"}"></span>
+                <span>Invariants ${s.passing}/${s.total} passing</span>
+              </div>
+              ${
+                s.failing > 0
+                  ? `<div class="overview-health-metric" onclick="switchTab('invariants')" style="color:var(--red)">
+                <span>${s.failing} failing</span>
+              </div>`
+                  : ""
+              }
+            </div>
+            <div class="overview-health-link" onclick="switchTab('invariants')">View →</div>
+          </div>
+        </section>
+      `;
+      })()
+    : ""
+}
+
+${
+  (DATA.techStack || []).length
+    ? `
+  <section>
+    <div class="overview-health-strip">
+      <div class="overview-health-metrics">
+        ${(DATA.techStack || [])
+          .filter((t) =>
+            ["framework", "language", "styling", "database"].includes(
+              t.category,
+            ),
+          )
+          .map(
+            (t) => `
+          <div class="overview-health-metric" onclick="switchTab('techstack')">
+            <span>${esc(t.name)}${t.version ? " " + esc(t.version) : ""}</span>
+          </div>
+        `,
+          )
+          .join("")}
+      </div>
+      <div class="overview-health-link" onclick="switchTab('techstack')">All ${(DATA.techStack || []).length} →</div>
+    </div>
+  </section>
+`
+    : ""
+}
+
+<section>
+  <div class="overview-section-title">Surfaces</div>
+  <div class="overview-surface-grid">
+    ${(DATA.surfaces || [])
+      .map((surface) => {
+        const featureCount = (DATA.features || []).filter((feature) =>
+          (feature.surfaceIds || []).includes(surface.id),
+        ).length;
+        const entityCount = (surface.entityIds || []).length;
+        return `
+        <div class="overview-surface-card" onclick="switchTab('surfaces'); setTimeout(() => selectSurface('${surface.id}'), 50);">
+          <div class="overview-surface-card-title">${surface.name}</div>
+          <div class="overview-surface-meta">
+            <span class="detail-tag badge-${surface.actor}">${surface.actor}</span>
+            <span class="overview-surface-route">${surface.entrypoint.route}</span>
+          </div>
+          <div class="overview-surface-counts">
+            <span>${featureCount} feature${featureCount === 1 ? "" : "s"}</span>
+            <span>${entityCount} entit${entityCount === 1 ? "y" : "ies"}</span>
+          </div>
+        </div>
+      `;
+      })
+      .join("")}
+  </div>
+</section>
+
+<section>
+  <div class="overview-section-title">Feature Breakdown by Kind</div>
+  <div class="overview-feature-breakdown">
+    ${featuresByKind
+      .map(
+        ([kind, items]) => `
+      <div class="overview-feature-kind-line">
+        <span class="overview-feature-kind-label">${kind.charAt(0).toUpperCase() + kind.slice(1)} (${items.length}):</span>
+        ${items
+          .map(
+            (feature, index) => `
+          <span class="overview-feature-link" onclick="switchTab('features'); setTimeout(() => selectFeature('${feature.id}'), 50);">${feature.name}</span>${index < items.length - 1 ? ", " : ""}
+        `,
+          )
+          .join("")}
+      </div>
+    `,
+      )
+      .join("")}
+  </div>
+</section>
+
+<section>
+  <div class="overview-section-title">Key Flows</div>
+  <div class="overview-flows">
+    ${highlightedFlows
+      .map(
+        (flow) => `
+      <div class="overview-flow-card" onclick="switchTab('flows'); setTimeout(() => selectFlow('${flow.id}'), 50);">
+        <div class="overview-flow-top">
+          <span class="overview-flow-name">${flow.name}</span>
+          <span class="detail-tag badge-${flow.actor}">${flow.actor}</span>
+        </div>
+        <div class="overview-flow-meta">${flow.steps.length} step${flow.steps.length === 1 ? "" : "s"}</div>
+      </div>
+    `,
+      )
+      .join("")}
+    ${flows.length > 8 ? `<div class="overview-view-all" onclick="switchTab('flows')">View all ${flows.length} flows →</div>` : ""}
+  </div>
+</section>
+    </div>
+  `;
+}
+
+const TECH_STACK_CATEGORY_ORDER = [
+  "language",
+  "framework",
+  "styling",
+  "database",
+  "auth",
+  "api",
+  "testing",
+  "deployment",
+  "ai",
+  "payments",
+  "monitoring",
+  "other",
+];
+
+function renderTechStack() {
+  const container = document.getElementById("techstack-content");
+  if (!container) return;
+
+  const items = DATA.techStack || [];
+  if (!items.length) {
+    container.innerHTML =
+      '<div class="techstack-empty">No tech stack data. Re-run cartograph to generate.</div>';
+    return;
+  }
+
+  // Group by category
+  const grouped = {};
+  items.forEach((item) => {
+    const cat = item.category || "other";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  });
+
+  // Sort categories by defined order
+  const orderedCategories = TECH_STACK_CATEGORY_ORDER.filter(
+    (cat) => grouped[cat] && grouped[cat].length,
+  ).concat(
+    Object.keys(grouped).filter(
+      (cat) => !TECH_STACK_CATEGORY_ORDER.includes(cat),
+    ),
+  );
+
+  container.innerHTML = `
+    <div class="techstack-stack">
+      ${orderedCategories
+        .map(
+          (cat) => `
+        <section>
+          <div class="techstack-category-title">${cat}</div>
+          <div class="techstack-grid">
+            ${grouped[cat]
+              .map(
+                (item) => `
+              <div class="techstack-card">
+                <div class="techstack-card-body">
+                  <div class="techstack-card-name">
+                    ${esc(item.name)}${item.version ? `<span class="techstack-card-version">v${esc(item.version)}</span>` : ""}
+                  </div>
+                  ${item.description ? `<div class="techstack-card-desc">${esc(item.description)}</div>` : ""}
+                  <div class="techstack-card-meta">
+                    <span>${esc(item.source || "")}</span>
+                    ${item.confidence ? `<span class="detail-tag badge-${item.confidence === "high" ? "system" : item.confidence === "medium" ? "admin" : "user"}">${item.confidence}</span>` : ""}
+                  </div>
+                </div>
+              </div>
+            `,
+              )
+              .join("")}
+          </div>
+        </section>
+      `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderCodeHealthSidebar() {
+  const sidebar = document.getElementById("codehealth-sidebar");
+  if (!sidebar) return;
+
+  const metrics = getCodeHealthMetrics();
+  ensureEngHealthMetricSelection();
+  const activeMetric =
+    getMetricById(engHealthMetricId) || metrics[0] || null;
+  const findings =
+    activeMetric && Array.isArray(activeMetric.findings)
+      ? activeMetric.findings
+      : [];
+
+  if (!metrics.length) {
+    sidebar.innerHTML =
+      '<div class="eng-health-empty">No code health data. Re-run Cartograph with the health pass enabled.</div>';
+    return;
+  }
+
+  sidebar.innerHTML = `
+    <div class="codehealth-sidebar-stack">
+<div class="eng-health-scoreboard">
+  ${metrics
+    .map((metric) => {
+      const state = getMetricState(metric);
+      return `
+      <button class="eng-health-score-item${metric.id === engHealthMetricId ? " active" : ""}" type="button" onclick="selectEngHealthMetric('${metric.id}')">
+        <div class="eng-health-score-row">
+          <span class="eng-health-score-dot metric-state-${state}"></span>
+          <span class="eng-health-score-name">${metric.name}</span>
+          <span class="eng-health-score-value">${Math.round(metric.score)}%</span>
+        </div>
+        <div class="eng-health-score-desc">${metric.summary || metric.description || ""}</div>
+      </button>
+    `;
+    })
+    .join("")}
+</div>
+
+<div>
+  <div class="codehealth-findings-header">
+    <span>Findings</span>
+    <span>${findings.length}</span>
+  </div>
+</div>
+
+<div class="codehealth-findings-list">
+  ${renderCodeHealthFindings(activeMetric, findings)}
+</div>
+    </div>
+  `;
+
+  sidebar.querySelectorAll("[data-finding-key]").forEach((card) => {
+    const findingKey = card.dataset.findingKey;
+    card.addEventListener("click", () =>
+      toggleEngHealthFinding(findingKey),
+    );
+  });
+}
+
+function renderCodeHealthContent() {
+  const content = document.getElementById("codehealth-content");
+  if (!content) return;
+
+  const metrics = getCodeHealthMetrics();
+  ensureEngHealthMetricSelection();
+  const metric = getMetricById(engHealthMetricId) || metrics[0] || null;
+  const activeFindingRef = getActiveHealthFindingRef();
+
+  if (!metrics.length || !metric) {
+    content.innerHTML =
+      '<div class="eng-health-empty">No code health data. Re-run Cartograph with the health pass enabled.</div>';
+    return;
+  }
+
+  if (!activeFindingRef || activeFindingRef.metric.id !== metric.id) {
+    const thresholds = metric.thresholds || {};
+    content.innerHTML = `
+<div>
+  <div class="codehealth-metric-hero">
+    <div>
+      <div class="codehealth-metric-title">${metric.name}</div>
+      <div class="detail-desc">${metric.description || ""}</div>
+    </div>
+    <div class="codehealth-metric-score">
+      <span class="eng-health-score-dot metric-state-${getMetricState(metric)}"></span>
+      <span>${Math.round(metric.score)}%</span>
+    </div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Summary</div>
+    <div class="detail-desc">${metric.summary || getEmptyMetricMessage(metric)}</div>
+  </div>
+  <div class="codehealth-threshold-bar">
+    <div class="codehealth-threshold-segment">
+      <div class="codehealth-threshold-label">Green</div>
+      <div class="codehealth-threshold-value">≥ ${typeof thresholds.green === "number" ? thresholds.green : 90}%</div>
+    </div>
+    <div class="codehealth-threshold-segment">
+      <div class="codehealth-threshold-label">Yellow</div>
+      <div class="codehealth-threshold-value">≥ ${typeof thresholds.yellow === "number" ? thresholds.yellow : 70}%</div>
+    </div>
+    <div class="codehealth-threshold-segment">
+      <div class="codehealth-threshold-label">Red</div>
+      <div class="codehealth-threshold-value">&lt; ${typeof thresholds.yellow === "number" ? thresholds.yellow : 70}%</div>
+    </div>
+  </div>
+</div>
+    `;
+    return;
+  }
+
+  const { finding } = activeFindingRef;
+  const recommendation = finding.recommendation || {};
+
+  if (metric.id === "co-location") {
+    content.innerHTML = `
+<div class="codehealth-finding-detail">
+  <div class="codehealth-detail-path">${finding.file || "Unspecified file"}</div>
+
+  <div class="codehealth-detail-section">
+    <div class="codehealth-detail-section-title">Reason</div>
+    <div class="detail-desc">${finding.reason || "This file appears to be misplaced."}</div>
+  </div>
+
+  ${
+    Array.isArray(finding.consumers) && finding.consumers.length
+      ? `
+    <div class="codehealth-detail-section">
+      <div class="codehealth-detail-section-title">Consumers</div>
+      <div class="codehealth-detail-list">
+        ${finding.consumers
+          .map(
+            (consumer) => `
+          <div class="codehealth-detail-item">
+            <div class="codehealth-detail-item-title">${consumer}</div>
+          </div>
+        `,
+          )
+          .join("")}
+      </div>
+    </div>
+  `
+      : ""
+  }
+
+  ${
+    recommendation.action || recommendation.target
+      ? `
+    <div class="codehealth-detail-section">
+      <div class="codehealth-detail-section-title">Recommendation</div>
+      <div class="codehealth-detail-item">
+        <div class="codehealth-detail-item-title">${recommendation.action || "Review"}${recommendation.target ? ` → ${recommendation.target}` : ""}</div>
+      </div>
+    </div>
+  `
+      : ""
+  }
+
+  ${renderHealthNavActions(metric, finding)}
+</div>
+    `;
+    return;
+  }
+
+  if (metric.id === "dryness") {
+    content.innerHTML = `
+<div class="codehealth-finding-detail">
+  <div>
+    <div class="codehealth-detail-title">${finding.title || "Duplication finding"}</div>
+    ${finding.severity ? `<span class="eng-health-severity eng-health-severity-${finding.severity}" style="margin-top:10px;">${finding.severity}</span>` : ""}
+  </div>
+
+  ${
+    Array.isArray(finding.implementations) &&
+    finding.implementations.length
+      ? `
+    <div class="codehealth-detail-section">
+      <div class="codehealth-detail-section-title">Implementations</div>
+      <div class="codehealth-detail-list">
+        ${finding.implementations
+          .map(
+            (implementation) => `
+          <div class="codehealth-detail-item">
+            <div class="codehealth-detail-item-title">${implementation.location || implementation.file || "Unknown location"}</div>
+            ${implementation.description ? `<div class="codehealth-detail-item-copy">${implementation.description}</div>` : ""}
+          </div>
+        `,
+          )
+          .join("")}
+      </div>
+    </div>
+  `
+      : ""
+  }
+
+  ${
+    Array.isArray(finding.sharedLogic) && finding.sharedLogic.length
+      ? `
+    <div class="codehealth-detail-section">
+      <div class="codehealth-detail-section-title">Shared Logic</div>
+      <div class="codehealth-detail-list">
+        ${finding.sharedLogic
+          .map(
+            (item) => `
+          <div class="codehealth-detail-item">
+            <div class="codehealth-detail-item-copy">${item}</div>
+          </div>
+        `,
+          )
+          .join("")}
+      </div>
+    </div>
+  `
+      : ""
+  }
+
+  ${
+    recommendation.action ||
+    recommendation.target ||
+    (recommendation.shared || []).length ||
+    (recommendation.keepSeparate || []).length
+      ? `
+    <div class="codehealth-detail-section">
+      <div class="codehealth-detail-section-title">Recommendation</div>
+      <div class="codehealth-detail-item">
+        ${recommendation.action || recommendation.target ? `<div class="codehealth-detail-item-title">${recommendation.action || "Extract shared logic"}${recommendation.target ? ` → ${recommendation.target}` : ""}</div>` : ""}
+        ${(recommendation.shared || []).length ? `<div class="codehealth-detail-item-copy">Share: ${recommendation.shared.join(", ")}</div>` : ""}
+        ${(recommendation.keepSeparate || []).length ? `<div class="codehealth-detail-item-copy">Keep separate: ${recommendation.keepSeparate.join(", ")}</div>` : ""}
+      </div>
+    </div>
+  `
+      : ""
+  }
+
+  ${renderHealthNavActions(metric, finding)}
+</div>
+    `;
+    return;
+  }
+
+  if (metric.id === "dead-code") {
+    content.innerHTML = `
+<div class="codehealth-finding-detail">
+  <div>
+    <div class="codehealth-detail-title">${finding.target || "Dead code finding"}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+      ${finding.kind ? `<span class="detail-tag">${getDeadCodeKindLabel(finding.kind)}</span>` : ""}
+      ${finding.severity ? `<span class="eng-health-severity eng-health-severity-${finding.severity}">${finding.severity}</span>` : ""}
+    </div>
+  </div>
+
+  <div class="codehealth-detail-section">
+    <div class="codehealth-detail-section-title">Reason</div>
+    <div class="detail-desc">${finding.reason || "This item appears to be dead code."}</div>
+  </div>
+
+  ${renderDeadCodeEvidence(finding)}
+
+  ${
+    recommendation.action || recommendation.detail
+      ? `
+    <div class="codehealth-detail-section">
+      <div class="codehealth-detail-section-title">Recommendation</div>
+      <div class="codehealth-detail-item">
+        ${recommendation.action || recommendation.detail ? `<div class="codehealth-detail-item-title">${recommendation.action || "Review"}</div>` : ""}
+        ${recommendation.detail ? `<div class="codehealth-detail-item-copy">${recommendation.detail}</div>` : ""}
+      </div>
+    </div>
+  `
+      : ""
+  }
+
+  ${renderHealthNavActions(metric, finding)}
+</div>
+    `;
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="codehealth-finding-detail">
+<div class="codehealth-detail-title">${finding.title || `${metric.name} finding`}</div>
+${finding.reason ? `<div class="detail-desc">${finding.reason}</div>` : ""}
+${renderHealthNavActions(metric, finding)}
+    </div>
+  `;
+}
+
+function renderCodeHealthTab() {
+  renderCodeHealthSidebar();
+  renderCodeHealthContent();
+}
+
+function navigateToFindingInTab(tabId) {
+  if (!getActiveHealthTargets().length) return;
+  switchTab(tabId, { preserveHealthFinding: true });
+  if (tabId === "codeorg" && getActiveHealthCompartmentIds().length) {
+    showCodemapGraph();
+  }
+}
+
+function computeEntitySurfaceMap() {
+  entitySurfaceMap = {};
+  if (!DATA.surfaces) return;
+  DATA.entities.forEach((e) => {
+    entitySurfaceMap[e.id] = [];
+  });
+  DATA.surfaces.forEach((s) => {
+    (s.entityIds || []).forEach((eid) => {
+      if (!entitySurfaceMap[eid]) entitySurfaceMap[eid] = [];
+      entitySurfaceMap[eid].push(s.id);
+    });
+  });
+}
+
+function getExposureLevel(entityId) {
+  const count = (entitySurfaceMap[entityId] || []).length;
+  if (count <= 1) return "scoped";
+  if (count === 2) return "shared";
+  return "cross-cutting";
+}
+
+function getExposureLabel(entityId) {
+  const level = getExposureLevel(entityId);
+  const count = (entitySurfaceMap[entityId] || []).length;
+  const labels = {
+    scoped: "scoped",
+    shared: "shared",
+    "cross-cutting": "cross-cutting",
+  };
+  return `${count} surface${count !== 1 ? "s" : ""} (${labels[level]})`;
+}
+
+// -- Color map for entity kinds --
+const KIND_COLORS = {
+  "db-model": { fill: "rgba(91,141,239,0.14)", stroke: "#5b8def" },
+  dto: { fill: "rgba(78,173,122,0.14)", stroke: "#4ead7a" },
+  state: { fill: "rgba(212,127,74,0.14)", stroke: "#d47f4a" },
+  derived: { fill: "rgba(155,111,205,0.14)", stroke: "#9b6fcd" },
+  config: { fill: "rgba(91,141,239,0.14)", stroke: "#5b8def" },
+  enum: { fill: "rgba(212,107,138,0.14)", stroke: "#d46b8a" },
+};
+const DEFAULT_COLOR = {
+  fill: "rgba(255,255,255,0.04)",
+  stroke: "#5c584e",
+};
+
+// -- Invariants rendering --
+function updateInvariantsTabVisibility() {
+  const tab = document.getElementById("invariants-tab");
+  if (!tab) return;
+  const inv = getInvariantsData();
+  tab.style.display = inv ? "" : "none";
+  const badge = document.getElementById("invariants-tab-badge");
+  if (badge && inv) {
+    const s = inv.summary || {};
+    if (s.failing > 0) {
+      badge.className = "invariants-tab-badge has-failures";
+      badge.textContent = `${s.failing}/${s.total}`;
+    } else if (s.total > 0) {
+      badge.className = "invariants-tab-badge all-passing";
+      badge.textContent = `${s.passing}/${s.total}`;
+    } else {
+      badge.textContent = "";
+    }
+  }
+}
+
+function renderInvariantsTab() {
+  const content = document.getElementById("invariants-content");
+  if (!content) return;
+  const inv = getInvariantsData();
+  if (!inv || !inv.results.length) {
+    content.innerHTML =
+      '<div class="empty-state">No invariants defined</div>';
+    return;
+  }
+  const summary = inv.summary || {
+    total: 0,
+    passing: 0,
+    failing: 0,
+    skipped: 0,
+  };
+  const sorted = getInvariantsSorted();
+  content.innerHTML = `
+    <div class="invariants-summary-bar">
+      <span>${summary.total} invariant${summary.total === 1 ? "" : "s"}</span>
+      <span class="invariants-summary-stat passing">\u25CF ${summary.passing} passing</span>
+      <span class="invariants-summary-stat failing">\u25CF ${summary.failing} failing</span>
+      ${summary.skipped > 0 ? `<span class="invariants-summary-stat skipped">\u25CF ${summary.skipped} paused</span>` : ""}
+    </div>
+    <div>${sorted.map((r) => renderInvariantCard(r)).join("")}</div>
+  `;
+}
+
+function renderInvariantCard(result) {
+  const isExpanded = expandedInvariantId === result.id;
+  const statusIcon =
+    result.status === "pass"
+      ? "\u2713"
+      : result.status === "fail"
+        ? "\u2717"
+        : "\u23F8";
+  const tags = result.tags || [];
+  return `
+    <div class="invariants-card${isExpanded ? " expanded" : ""}" onclick="toggleInvariantExpand('${result.id}')">
+      <div class="invariants-card-header">
+        <span class="invariants-status-icon ${result.status}">${statusIcon}</span>
+        <span class="invariants-card-title">${esc(result.name)}</span>
+        <span class="invariants-severity ${result.severity}">${result.severity}</span>
+      </div>
+      ${result.summary ? `<div class="invariants-card-summary">${esc(result.summary)}</div>` : ""}
+      ${tags.length ? `<div class="invariants-card-tags">${tags.map((t) => `<span class="invariants-tag">${esc(t)}</span>`).join("")}</div>` : ""}
+      ${isExpanded ? renderInvariantExpandedDetail(result) : ""}
+    </div>
+  `;
+}
+
+function renderInvariantExpandedDetail(result) {
+  if (result.status === "skipped") {
+    return `<div class="invariants-expanded-detail">
+      <div style="color:var(--text-muted);font-size:13px;">This invariant is paused (enabled: false).</div>
+    </div>`;
+  }
+  const evidence = result.evidence || {};
+  const checkedFiles = evidence.checkedFiles || [];
+  const violations = evidence.violations || [];
+  // Build surface/feature links
+  const surfaces = (result.surfaceIds || [])
+    .map((sid) => (DATA.surfaces || []).find((s) => s.id === sid))
+    .filter(Boolean);
+  const features = (result.featureIds || [])
+    .map((fid) => (DATA.features || []).find((f) => f.id === fid))
+    .filter(Boolean);
+  let surfaceLinks = "";
+  let featureLinks = "";
+  if (surfaces.length) {
+    surfaceLinks = `<div class="invariants-detail-section">
+      <div class="invariants-detail-section-title">Surfaces</div>
+      <div class="invariants-surface-feature-links">
+        ${surfaces.map((s) => `<span class="feature-surface-chip" onclick="event.stopPropagation(); switchTab('surfaces'); setTimeout(() => selectSurface('${s.id}'), 50);">${esc(s.name)}</span>`).join("")}
+      </div>
+    </div>`;
+  }
+  if (features.length) {
+    featureLinks = `<div class="invariants-detail-section">
+      <div class="invariants-detail-section-title">Features</div>
+      <div class="invariants-surface-feature-links">
+        ${features.map((f) => `<span class="feature-surface-chip" onclick="event.stopPropagation(); switchTab('features'); setTimeout(() => selectFeature('${f.id}'), 50);">${esc(f.name)}</span>`).join("")}
+      </div>
+    </div>`;
+  }
+  return `
+    <div class="invariants-expanded-detail" onclick="event.stopPropagation()">
+      ${
+        violations.length
+          ? `
+        <div class="invariants-detail-section">
+          <div class="invariants-detail-section-title">Violations (${violations.length})</div>
+          ${violations
+            .map(
+              (v) => `
+            <div class="invariants-violation">
+              <div class="invariants-violation-file">${esc(v.file)}${v.line ? ":" + v.line : ""}</div>
+              <div class="invariants-violation-expected"><span class="invariants-violation-label">Expected: </span>${esc(v.expected)}</div>
+              <div class="invariants-violation-found"><span class="invariants-violation-label">Found: </span>${esc(v.found)}</div>
+              <div class="invariants-violation-suggestion"><span class="invariants-violation-label">Suggestion: </span>${esc(v.suggestion)}</div>
+            </div>
+          `,
+            )
+            .join("")}
+        </div>
+      `
+          : ""
+      }
+      ${
+        checkedFiles.length
+          ? `
+        <div class="invariants-detail-section">
+          <div class="invariants-detail-section-title">Checked Files (${checkedFiles.length})</div>
+          <div class="invariants-checked-files">${checkedFiles.map((f) => esc(f)).join("<br>")}</div>
+        </div>
+      `
+          : ""
+      }
+      ${surfaceLinks}
+      ${featureLinks}
+      ${
+        getInvariantPrompt(result)
+          ? `
+        <div class="invariants-detail-section">
+          <div class="invariants-detail-section-title">${getInvariantPromptLabel(result)}</div>
+          <div class="invariants-prompt-block">
+            <button class="invariants-copy-btn" data-copy-invariant="${result.id}" onclick="event.stopPropagation(); copyInvariantPrompt('${result.id}')">Copy</button>${esc(getInvariantPrompt(result))}</div>
+        </div>
+      `
+          : ""
+      }
+    </div>
+  `;
+}
+
+// -- Init --
+function init() {
+  ensureEngHealthMetricSelection();
+  computeEntitySurfaceMap();
+  computeFileTreeColors();
+  updateInvariantsTabVisibility();
+  renderStats();
+  setupTabs();
+  setupSearch();
+  switchTab("overview");
+}
+
+function renderStats() {
+  const el = document.getElementById("stats");
+  const surfaceCount = (DATA.surfaces || []).length;
+  const featureCount = (DATA.features || []).length;
+  el.innerHTML = `
+    <span><span class="stat-val">${surfaceCount}</span>surfaces</span>
+    <span><span class="stat-val">${featureCount}</span>features</span>
+    <span><span class="stat-val">${DATA.entities.length}</span>entities</span>
+    <span><span class="stat-val">${DATA.relationships.length}</span>relationships</span>
+    <span><span class="stat-val">${DATA.flows.length}</span>flows</span>
+    <span><span class="stat-val">${(DATA.compartments || []).length}</span>compartments</span>
+    <span><span class="stat-val">${getTrackedFileCount()}</span>files tracked</span>
+  `;
+  document.title = `Cartograph — ${DATA.meta.name}`;
+}
+
+// -- Tabs --
+function setupTabs() {
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+  });
+}
+
+function updateTabGroupState(activeTab) {
+  document.querySelectorAll(".tab-cluster").forEach((cluster) => {
+    const hasActiveTab = !!cluster.querySelector(
+      `.tab[data-tab="${activeTab}"]`,
+    );
+    cluster.classList.toggle("active-group", hasActiveTab);
+  });
+}
+
+function switchTab(tab, options = {}) {
+  const preserveHealthFinding = !!options.preserveHealthFinding;
+  if (tab !== "codehealth" && !preserveHealthFinding) {
+    engHealthActiveFindingKey = null;
+    engHealthHoveredFindingKey = null;
+  }
+  currentTab = tab;
+  document.body.dataset.tabGroup =
+    tab === "overview" ? "overview" : ENG_TABS.has(tab) ? "eng" : "pm";
+  document
+    .querySelectorAll(".tab")
+    .forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+  updateTabGroupState(tab);
+  document.querySelectorAll(".panel").forEach((p) => {
+    p.classList.remove("active");
+    p.style.display = "none";
+  });
+  const panel = document.getElementById(TAB_PANEL_MAP[tab]);
+  if (!panel) return;
+  const sidebar = document.querySelector(".sidebar");
+  sidebar.style.display = NO_SIDEBAR_TABS.has(tab) ? "none" : "flex";
+  panel.classList.add("active");
+  panel.style.display = "flex";
+  renderSidebar();
+  if (tab === "overview") renderOverview();
+  if (tab === "techstack") renderTechStack();
+  if (tab === "datamodel") renderEntityMap();
+  if (tab === "codeorg") renderCodemapView();
+  if (tab === "featuremap") renderFileTreeContent();
+  if (tab === "codehealth") renderCodeHealthTab();
+  if (tab === "invariants") renderInvariantsTab();
+  if (
+    tab === "surfaces" &&
+    !selectedSurfaceId &&
+    (DATA.surfaces || []).length > 0
+  ) {
+    selectSurface(DATA.surfaces[0].id);
+  }
+}
+
+// -- Search --
+function setupSearch() {
+  document.getElementById("search").addEventListener("input", (e) => {
+    searchQuery = e.target.value.toLowerCase();
+    renderSidebar();
+  });
+}
+
+// -- Sidebar --
+function renderSidebar() {
+  const list = document.getElementById("sidebar-list");
+  list.innerHTML = "";
+
+  if (
+    currentTab === "overview" ||
+    currentTab === "codehealth" ||
+    currentTab === "invariants"
+  ) {
+    return;
+  }
+
+  if (currentTab === "surfaces") {
+    const surfaces = (DATA.surfaces || []).filter(
+      (s) =>
+        !searchQuery ||
+        s.name.toLowerCase().includes(searchQuery) ||
+        s.description.toLowerCase().includes(searchQuery),
+    );
+    surfaces.forEach((surface) => {
+      const div = document.createElement("div");
+      div.className = `sidebar-item${selectedSurfaceId === surface.id ? " active" : ""}`;
+      div.innerHTML = `
+  <span class="sidebar-badge badge-${surface.actor}">${surface.actor}</span>
+  <span class="sidebar-label">${surface.name}</span>
+`;
+      div.addEventListener("click", () => selectSurface(surface.id));
+      list.appendChild(div);
+    });
+
+    // Add "Exposure Matrix" as a special sidebar item
+    if ((DATA.surfaces || []).length > 0) {
+      const sep = document.createElement("div");
+      sep.style.cssText =
+        "height:1px; background:var(--border); margin:8px 4px;";
+      list.appendChild(sep);
+
+      const matrixItem = document.createElement("div");
+      matrixItem.className = `sidebar-item${selectedSurfaceId === "__matrix__" ? " active" : ""}`;
+      matrixItem.innerHTML = `
+  <span class="sidebar-badge badge-surface">all</span>
+  <span class="sidebar-label">Exposure Matrix</span>
+`;
+      matrixItem.addEventListener("click", () =>
+        selectSurface("__matrix__"),
+      );
+      list.appendChild(matrixItem);
+    }
+  } else if (currentTab === "features") {
+    const features = (DATA.features || []).filter(
+      (f) =>
+        !searchQuery ||
+        f.name.toLowerCase().includes(searchQuery) ||
+        f.description.toLowerCase().includes(searchQuery),
+    );
+    features.forEach((feature) => {
+      const div = document.createElement("div");
+      div.className = `sidebar-item${selectedFeatureId === feature.id ? " active" : ""}`;
+      div.innerHTML = `
+  <span class="sidebar-badge badge-${feature.kind}">${feature.kind}</span>
+  <span class="sidebar-label">${feature.name}</span>
+`;
+      div.addEventListener("click", () => selectFeature(feature.id));
+      list.appendChild(div);
+    });
+  } else if (currentTab === "datamodel") {
+    const items = DATA.entities.filter(
+      (e) =>
+        !searchQuery ||
+        e.name.toLowerCase().includes(searchQuery) ||
+        e.description.toLowerCase().includes(searchQuery),
+    );
+    items.forEach((entity) => {
+      const div = document.createElement("div");
+      div.className = `sidebar-item${selectedEntityId === entity.id ? " active" : ""}`;
+      div.innerHTML = `
+  <span class="sidebar-badge badge-${entity.kind}">${entity.kind}</span>
+  <span class="sidebar-label">${entity.name}</span>
+`;
+      div.addEventListener("click", () => selectEntity(entity.id));
+      list.appendChild(div);
+    });
+  } else if (currentTab === "flows") {
+    const items = DATA.flows.filter(
+      (f) =>
+        !searchQuery ||
+        f.name.toLowerCase().includes(searchQuery) ||
+        f.description.toLowerCase().includes(searchQuery),
+    );
+    items.forEach((flow) => {
+      const div = document.createElement("div");
+      div.className = `sidebar-item${selectedFlowId === flow.id ? " active" : ""}`;
+      div.innerHTML = `
+  <span class="sidebar-badge badge-${flow.actor}">${flow.actor}</span>
+  <span class="sidebar-label">${flow.name}</span>
+`;
+      div.addEventListener("click", () => selectFlow(flow.id));
+      list.appendChild(div);
+    });
+  } else if (currentTab === "codeorg") {
+    const compartments = DATA.compartments || [];
+    const topLevel = compartments.filter((c) => !c.parentId);
+
+    function getChildren(parentId) {
+      return compartments.filter((c) => c.parentId === parentId);
+    }
+
+    function getTotalFileCount(comp) {
+      let count = (comp.files || []).length;
+      getChildren(comp.id).forEach((child) => {
+        count += getTotalFileCount(child);
+      });
+      return count;
+    }
+
+    function matchesSearch(comp) {
+      if (!searchQuery) return true;
+      if (comp.name.toLowerCase().includes(searchQuery)) return true;
+      if (
+        comp.description &&
+        comp.description.toLowerCase().includes(searchQuery)
+      )
+        return true;
+      if (
+        (comp.tags || []).some((t) =>
+          t.toLowerCase().includes(searchQuery),
+        )
+      )
+        return true;
+      return getChildren(comp.id).some((child) => matchesSearch(child));
+    }
+
+    function renderTreeItem(comp, depth) {
+      if (!matchesSearch(comp)) return;
+      const children = getChildren(comp.id);
+      const hasChildren = children.length > 0;
+      const isExpanded = expandedCompartments[comp.id];
+      const fileCount = getTotalFileCount(comp);
+      const healthHighlighted = isCompartmentHighlightedByHealth(comp.id);
+
+      const div = document.createElement("div");
+      div.className = `sidebar-tree-item${selectedCompartmentId === comp.id ? " active" : ""}${healthHighlighted ? " health-highlight" : ""}`;
+      div.style.setProperty("--depth", depth);
+      div.innerHTML = `
+  <span class="tree-toggle ${hasChildren ? (isExpanded ? "expanded" : "") : "leaf"}">&#9654;</span>
+  <span class="sidebar-label">${comp.name}</span>
+  <span class="tree-file-count">${fileCount}</span>
+`;
+      div.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (hasChildren && e.target.closest(".tree-toggle")) {
+          expandedCompartments[comp.id] = !expandedCompartments[comp.id];
+          renderSidebar();
+        } else {
+          selectCompartment(comp.id);
+        }
+      });
+      list.appendChild(div);
+
+      if (hasChildren && isExpanded) {
+        children.forEach((child) => renderTreeItem(child, depth + 1));
+      }
+    }
+
+    topLevel.forEach((comp) => renderTreeItem(comp, 0));
+
+    if (compartments.length === 0) {
+      const empty = document.createElement("div");
+      empty.style.cssText =
+        "padding:16px;color:var(--text-dim);font-size:13px;";
+      empty.textContent =
+        "No compartment data. Re-run cartograph to generate.";
+      list.appendChild(empty);
+    }
+  } else if (currentTab === "featuremap") {
+    renderFileTreeSidebar(list);
+    return;
+  }
+}
+
+// -- Feature File Map Prompt --
+function renderFileMapPrompt(feature) {
+  const implFiles = (feature.implementations || [])
+    .map((i) => i.file)
+    .join(", ");
+  const surfaceNames = (feature.surfaceIds || [])
+    .map((sid) => {
+      const s = (DATA.surfaces || []).find((s) => s.id === sid);
+      return s ? s.name + " (" + s.entrypoint.route + ")" : sid;
+    })
+    .join(", ");
+  const entityNames = (feature.entityIds || [])
+    .map((eid) => {
+      const e = (DATA.entities || []).find((e) => e.id === eid);
+      return e ? e.name : eid;
+    })
+    .join(", ");
+  const jsonPath = ".cartograph/mapping.json";
+
+  const prompt = `This is a follow-up task for the **Cartograph** skill (codebase mapping tool, defined in \`.agents/skills/cartograph/\`). The initial scan produced \`${jsonPath}\` with features, surfaces, entities, etc. Now I need you to map the complete file surface area for one specific feature.
+
+Map every file in the codebase that participates in the "${feature.name}" feature and update the Cartograph mapping JSON.
+
+## Feature details
+- **ID**: \`${feature.id}\`
+- **Kind**: ${feature.kind}
+- **Description**: ${feature.description}
+- **Surfaces**: ${surfaceNames || "none"}
+- **Entities**: ${entityNames || "none"}
+- **Known implementation files**: ${implFiles || "none"}
+
+## Task
+Starting from the known implementation files above, trace ALL files that are part of this feature. This means:
+1. Read each known implementation file and follow every import/dependency
+2. Search for components, hooks, server actions, lib utilities, types, configs, tests, and styles that are used by or support this feature
+3. Search broadly — grep for feature-specific keywords, entity names, component names, and action names across the whole repo
+4. Include files at every layer: UI components, server actions, API routes, lib/service helpers, type definitions, test files, and config files
+5. Do NOT include generic shared infrastructure (e.g., prisma client, auth helpers, global UI primitives) unless they contain feature-specific logic
+
+## Output
+Once you have the complete list, read \`${jsonPath}\` and find the feature with id \`${feature.id}\` in the \`features\` array. Update its \`"files"\` field with an array of objects, each with:
+- \`"file"\`: relative file path (string)
+- \`"role"\`: one of "component", "action", "hook", "lib", "style", "test", "type", "config", "api", "other"
+
+Write the updated JSON back to \`${jsonPath}\`. Do not modify any other part of the JSON.`;
+
+  const escaped = prompt
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const copyId = "copy-" + feature.id;
+  return `
+    <div class="feature-filemap-prompt">
+<button class="feature-filemap-copy" onclick="copyFileMapPrompt('${copyId}')">Copy</button>
+<pre id="${copyId}">${escaped}</pre>
+    </div>
+  `;
+}
+
+function copyFileMapPrompt(preId) {
+  const pre = document.getElementById(preId);
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    const btn = pre.parentElement.querySelector(".feature-filemap-copy");
+    if (btn) {
+      btn.textContent = "Copied!";
+      setTimeout(() => {
+        btn.textContent = "Copy";
+      }, 2000);
+    }
+  });
+}
+
+// -- Feature LLM Context --
+function buildFeatureLLMContext(feature) {
+  const surfaces = (feature.surfaceIds || [])
+    .map((sid) => (DATA.surfaces || []).find((s) => s.id === sid))
+    .filter(Boolean);
+  const entities = (feature.entityIds || [])
+    .map((eid) => (DATA.entities || []).find((e) => e.id === eid))
+    .filter(Boolean);
+  const impls = feature.implementations || [];
+  const files = feature.files || [];
+
+  let ctx = `# Feature: ${feature.name}
+
+> This context was generated by the **Cartograph** skill (codebase mapping tool, defined in \`.agents/skills/cartograph/\`), from \`.cartograph/mapping.json\`. See \`.cartograph/mapping.json\` for the full codebase map — surfaces, features, entities, relationships, operations, flows, and compartments.
+
+In Cartograph, a **feature** is a standalone capability embedded within one or more surfaces. Surfaces are "where you go" (pages/routes); features are "what you can do" (capabilities). Features are the reusable functional building blocks that surfaces compose — things like "the like system", "the prompt wizard", "the star credit system." A feature is independently describable without referencing a specific page. Feature kinds: **tool** (interactive multi-step experience), **interaction** (single-action engagement), **transaction** (money/credit flow), **gate** (access control), **infrastructure** (backend capability), **workflow** (multi-step admin/system process).
+
+## Overview
+- **ID**: \`${feature.id}\`
+- **Kind**: ${feature.kind}
+- **Confidence**: ${feature.confidence}
+- **Description**: ${feature.description}
+`;
+
+  if (surfaces.length) {
+    ctx += `\n## Surfaces (pages where this feature appears)\n`;
+    surfaces.forEach((s) => {
+      ctx += `- **${s.name}** — ${s.description} (route: \`${s.entrypoint.route}\`, file: \`${s.entrypoint.file}\`)\n`;
+    });
+  }
+
+  if (entities.length) {
+    ctx += `\n## Entities (data this feature reads/writes)\n`;
+    entities.forEach((e) => {
+      ctx += `- **${e.name}** (\`${e.kind}\`) — ${e.description}`;
+      if (e.source) ctx += ` (defined in \`${e.source.file}\`)`;
+      ctx += `\n`;
+      if (e.fields && e.fields.length) {
+        e.fields.forEach((f) => {
+          ctx += `  - \`${f.name}\`: ${f.type} — ${f.description}\n`;
+        });
+      }
+    });
+  }
+
+  if (impls.length) {
+    ctx += `\n## Key implementation files\n`;
+    impls.forEach((i) => {
+      ctx += `- \`${i.file}\` — ${i.description}\n`;
+    });
+  }
+
+  // Compartments (primary code-mapping mechanism)
+  const compIds = feature.compartmentIds || [];
+  const comps = compIds
+    .map((cid) => (DATA.compartments || []).find((c) => c.id === cid))
+    .filter(Boolean);
+  if (comps.length) {
+    ctx += `\n## Compartments (code areas)\n`;
+    comps.forEach((c) => {
+      ctx += `- **${c.name}** — ${c.description} (${(c.files || []).length} files, tags: ${(c.tags || []).join(", ")})\n`;
+      (c.files || []).forEach((f) => {
+        ctx += `  - \`${f.file}\` (${f.role})\n`;
+      });
+    });
+  }
+
+  if (files.length) {
+    const roleOrder = [
+      "component",
+      "hook",
+      "action",
+      "api",
+      "lib",
+      "type",
+      "config",
+      "style",
+      "test",
+      "other",
+    ];
+    const grouped = {};
+    files.forEach((f) => {
+      const r = f.role || "other";
+      if (!grouped[r]) grouped[r] = [];
+      grouped[r].push(f);
+    });
+    Object.values(grouped).forEach((arr) =>
+      arr.sort((a, b) => a.file.localeCompare(b.file)),
+    );
+    const sortedRoles = Object.keys(grouped).sort((a, b) => {
+      const ai = roleOrder.indexOf(a),
+        bi = roleOrder.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+    ctx += `\n## Complete file map (${files.length} files)\n`;
+    sortedRoles.forEach((role) => {
+      ctx += `\n### ${role} (${grouped[role].length})\n`;
+      grouped[role].forEach((f) => {
+        ctx += `- \`${f.file}\`\n`;
+      });
+    });
+  }
+
+  // Related operations
+  const ops = (DATA.operations || []).filter((o) =>
+    (feature.entityIds || []).includes(o.entityId),
+  );
+  if (ops.length) {
+    ctx += `\n## Related operations\n`;
+    ops.forEach((o) => {
+      ctx += `- **${o.name}** (\`${o.type}\` on ${o.entityId}) — ${o.description} (\`${o.implementation.file}#${o.implementation.function}\`)\n`;
+    });
+  }
+
+  return ctx;
+}
+
+function copyFeatureLLMContext(featureId) {
+  const feature = (DATA.features || []).find((f) => f.id === featureId);
+  if (!feature) return;
+  const ctx = buildFeatureLLMContext(feature);
+  navigator.clipboard.writeText(ctx).then(() => {
+    const btn = document.getElementById("llm-ctx-btn-" + featureId);
+    if (btn) {
+      btn.textContent = "Copied!";
+      setTimeout(() => {
+        btn.textContent = "Copy as LLM context";
+      }, 2000);
+    }
+  });
+}
+
+// -- Surface LLM Context --
+function buildSurfaceLLMContext(surface) {
+  const entities = (surface.entityIds || [])
+    .map((eid) => (DATA.entities || []).find((e) => e.id === eid))
+    .filter(Boolean);
+  const ops = (surface.operationIds || [])
+    .map((oid) => (DATA.operations || []).find((o) => o.id === oid))
+    .filter(Boolean);
+  const flows = (surface.flowIds || [])
+    .map((fid) => (DATA.flows || []).find((f) => f.id === fid))
+    .filter(Boolean);
+  const features = (DATA.features || []).filter((f) =>
+    (f.surfaceIds || []).includes(surface.id),
+  );
+
+  let ctx = `# Surface: ${surface.name}
+
+> Generated by the **Cartograph** skill (\`.agents/skills/cartograph/\`), from \`.cartograph/mapping.json\`. See \`.cartograph/mapping.json\` for the full codebase map — surfaces, features, entities, relationships, operations, flows, and compartments.
+
+In Cartograph, a **surface** is a self-contained entry point or standalone piece of functionality in the app — a distinct experience that works on its own. Each app is a collection of surfaces (e.g., "Explore Feed", "Admin Review Dashboard", "Chat Thread"). Surfaces are the top-level organizational unit; they have a URL and are something users navigate to. Entities are scoped to surfaces, and features are embedded within them.
+
+## Overview
+- **ID**: \`${surface.id}\`
+- **Route**: \`${surface.entrypoint.route}\`
+- **Entry file**: \`${surface.entrypoint.file}\`
+- **Actor**: ${surface.actor}
+- **Confidence**: ${surface.confidence}
+- **Description**: ${surface.description}
+`;
+
+  if (features.length) {
+    ctx += `\n## Features embedded in this surface\n`;
+    features.forEach((f) => {
+      ctx += `- **${f.name}** (\`${f.kind}\`) — ${f.description}\n`;
+    });
+  }
+
+  // Compartments
+  const surfCompIds = surface.compartmentIds || [];
+  const surfComps = surfCompIds
+    .map((cid) => (DATA.compartments || []).find((c) => c.id === cid))
+    .filter(Boolean);
+  if (surfComps.length) {
+    ctx += `\n## Compartments (code areas)\n`;
+    surfComps.forEach((c) => {
+      ctx += `- **${c.name}** — ${c.description} (${(c.files || []).length} files, tags: ${(c.tags || []).join(", ")})\n`;
+    });
+  }
+
+  if (entities.length) {
+    ctx += `\n## Entities\n`;
+    entities.forEach((e) => {
+      ctx += `- **${e.name}** (\`${e.kind}\`) — ${e.description}`;
+      if (e.source) ctx += ` (defined in \`${e.source.file}\`)`;
+      ctx += `\n`;
+    });
+  }
+
+  if (ops.length) {
+    ctx += `\n## Operations\n`;
+    ops.forEach((o) => {
+      ctx += `- **${o.name}** (\`${o.type}\`) — ${o.description} (\`${o.implementation.file}#${o.implementation.function}\`)\n`;
+    });
+  }
+
+  if (flows.length) {
+    ctx += `\n## Flows\n`;
+    flows.forEach((f) => {
+      ctx += `\n### ${f.name}\n${f.description}\nTrigger: ${f.trigger}\n`;
+      f.steps.forEach((s) => {
+        ctx += `${s.order}. ${s.description} (\`${s.implementation.file}#${s.implementation.function}\`)\n`;
+      });
+    });
+  }
+
+  return ctx;
+}
+
+function copySurfaceLLMContext(surfaceId) {
+  const surface = (DATA.surfaces || []).find((s) => s.id === surfaceId);
+  if (!surface) return;
+  navigator.clipboard
+    .writeText(buildSurfaceLLMContext(surface))
+    .then(() => {
+      const btn = document.getElementById(
+        "llm-ctx-btn-surface-" + surfaceId,
+      );
+      if (btn) {
+        btn.textContent = "Copied!";
+        setTimeout(() => {
+          btn.textContent = "Copy as LLM context";
+        }, 2000);
+      }
+    });
+}
+
+// -- Entity LLM Context --
+function buildEntityLLMContext(entity) {
+  const rels = (DATA.relationships || []).filter(
+    (r) => r.from === entity.id || r.to === entity.id,
+  );
+  const ops = (DATA.operations || []).filter(
+    (o) => o.entityId === entity.id,
+  );
+  const flows = (DATA.flows || []).filter((f) =>
+    f.steps.some((s) => s.entityId === entity.id),
+  );
+  const surfaces = (DATA.surfaces || []).filter((s) =>
+    (s.entityIds || []).includes(entity.id),
+  );
+  const features = (DATA.features || []).filter((f) =>
+    (f.entityIds || []).includes(entity.id),
+  );
+  const exposure = getExposureLevel(entity.id);
+
+  let ctx = `# Entity: ${entity.name}
+
+> Generated by the **Cartograph** skill (\`.agents/skills/cartograph/\`), from \`.cartograph/mapping.json\`. See \`.cartograph/mapping.json\` for the full codebase map — surfaces, features, entities, relationships, operations, flows, and compartments.
+
+In Cartograph, an **entity** is a domain object the app works with — the data. Entity kinds: **db-model** (Prisma/ORM model), **dto** (API payload/form data), **state** (client state object), **derived** (transformed type like \`PostWithAuthor\`), **config** (configuration object), **enum** (domain enum). Entities are scoped to surfaces: an entity in only 1 surface is "surface-scoped" (private), in 2 surfaces is "shared", and in 3+ is "cross-cutting" (core infrastructure).
+
+## Overview
+- **ID**: \`${entity.id}\`
+- **Kind**: ${entity.kind}
+- **Confidence**: ${entity.confidence}
+- **Exposure**: ${exposure}
+- **Source**: \`${entity.source.file}:${entity.source.line}\`
+- **Description**: ${entity.description}
+`;
+
+  if (entity.fields && entity.fields.length) {
+    ctx += `\n## Fields\n`;
+    entity.fields.forEach((f) => {
+      ctx += `- \`${f.name}\`: ${f.type} — ${f.description}\n`;
+    });
+  }
+
+  if (rels.length) {
+    ctx += `\n## Relationships\n`;
+    rels.forEach((r) => {
+      const other =
+        r.from === entity.id
+          ? (DATA.entities || []).find((e) => e.id === r.to)
+          : (DATA.entities || []).find((e) => e.id === r.from);
+      const dir =
+        r.from === entity.id
+          ? `${r.type} -> ${other?.name || r.to}`
+          : `<- ${r.type} ${other?.name || r.from}`;
+      ctx += `- ${dir} — ${r.description}\n`;
+    });
+  }
+
+  if (surfaces.length) {
+    ctx += `\n## Surfaces\n`;
+    surfaces.forEach((s) => {
+      ctx += `- **${s.name}** (\`${s.entrypoint.route}\`)\n`;
+    });
+  }
+
+  if (features.length) {
+    ctx += `\n## Used by features\n`;
+    features.forEach((f) => {
+      ctx += `- **${f.name}** (\`${f.kind}\`) — ${f.description}\n`;
+    });
+  }
+
+  if (ops.length) {
+    ctx += `\n## Operations\n`;
+    ops.forEach((o) => {
+      ctx += `- **${o.name}** (\`${o.type}\`) — ${o.description} (\`${o.implementation.file}#${o.implementation.function}\`)\n`;
+    });
+  }
+
+  if (flows.length) {
+    ctx += `\n## Participates in flows\n`;
+    flows.forEach((f) => {
+      ctx += `- **${f.name}** — ${f.description}\n`;
+    });
+  }
+
+  return ctx;
+}
+
+function copyEntityLLMContext(entityId) {
+  const entity = (DATA.entities || []).find((e) => e.id === entityId);
+  if (!entity) return;
+  navigator.clipboard
+    .writeText(buildEntityLLMContext(entity))
+    .then(() => {
+      const btn = document.getElementById(
+        "llm-ctx-btn-entity-" + entityId,
+      );
+      if (btn) {
+        btn.textContent = "Copied!";
+        setTimeout(() => {
+          btn.textContent = "Copy as LLM context";
+        }, 2000);
+      }
+    });
+}
+
+// -- Flow LLM Context --
+function buildFlowLLMContext(flow) {
+  let ctx = `# Flow: ${flow.name}
+
+> Generated by the **Cartograph** skill (\`.agents/skills/cartograph/\`), from \`.cartograph/mapping.json\`. See \`.cartograph/mapping.json\` for the full codebase map — surfaces, features, entities, relationships, operations, flows, and compartments.
+
+In Cartograph, a **flow** is a user-visible journey that combines multiple operations into an end-to-end process. Flows are traced from UI pages: what can a user do on each page, following the path from UI action to handler to service to DB. Each flow has a trigger (what initiates it), an actor (user/admin/system), and an ordered list of steps linking to specific operations, entities, and implementation files.
+
+## Overview
+- **ID**: \`${flow.id}\`
+- **Actor**: ${flow.actor}
+- **Confidence**: ${flow.confidence}
+- **Trigger**: ${flow.trigger}
+- **Description**: ${flow.description}
+
+## Steps
+`;
+  flow.steps.forEach((step) => {
+    const op = step.operationId
+      ? (DATA.operations || []).find((o) => o.id === step.operationId)
+      : null;
+    const entity = step.entityId
+      ? (DATA.entities || []).find((e) => e.id === step.entityId)
+      : null;
+    ctx += `${step.order}. **${step.description}**\n`;
+    ctx += `   - File: \`${step.implementation.file}#${step.implementation.function}\`\n`;
+    if (op) ctx += `   - Operation: ${op.name} (\`${op.type}\`)\n`;
+    if (entity)
+      ctx += `   - Entity: ${entity.name} (\`${entity.kind}\`)\n`;
+  });
+
+  return ctx;
+}
+
+function copyFlowLLMContext(flowId) {
+  const flow = (DATA.flows || []).find((f) => f.id === flowId);
+  if (!flow) return;
+  navigator.clipboard.writeText(buildFlowLLMContext(flow)).then(() => {
+    const btn = document.getElementById("llm-ctx-btn-flow-" + flowId);
+    if (btn) {
+      btn.textContent = "Copied!";
+      setTimeout(() => {
+        btn.textContent = "Copy as LLM context";
+      }, 2000);
+    }
+  });
+}
+
+// -- Feature View --
+function selectFeature(id) {
+  selectedFeatureId = id;
+  renderSidebar();
+
+  const content = document.getElementById("feature-content");
+  const feature = (DATA.features || []).find((f) => f.id === id);
+  if (!feature) return;
+
+  const surfaces = (feature.surfaceIds || [])
+    .map((sid) => (DATA.surfaces || []).find((s) => s.id === sid))
+    .filter(Boolean);
+  const entities = (feature.entityIds || [])
+    .map((eid) => DATA.entities.find((e) => e.id === eid))
+    .filter(Boolean);
+
+  content.innerHTML = `
+    <div class="feature-header" style="position:relative;">
+<button id="llm-ctx-btn-${feature.id}" onclick="copyFeatureLLMContext('${feature.id}')" style="position:absolute;top:0;right:0;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color 0.15s,color 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">Copy as LLM context</button>
+<div class="feature-title">${feature.name}</div>
+<div class="feature-meta">
+  <span class="detail-tag badge-${feature.kind}">${feature.kind}</span>
+  <span class="detail-tag badge-${feature.confidence}">${feature.confidence}</span>
+</div>
+<div class="detail-desc">${feature.description}</div>
+    </div>
+
+    ${
+surfaces.length
+  ? `
+    <div class="feature-section">
+<div class="feature-section-title">Embedded in Surfaces (${surfaces.length})</div>
+<div>
+  ${surfaces
+    .map(
+      (s) => `
+    <span class="feature-surface-chip" onclick="switchTab('surfaces'); setTimeout(() => selectSurface('${s.id}'), 50);">
+      <span class="detail-tag badge-${s.actor}">${s.actor}</span>
+      ${s.name}
+    </span>
+  `,
+    )
+    .join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${
+entities.length
+  ? `
+    <div class="feature-section">
+<div class="feature-section-title">Entities (${entities.length})</div>
+<div class="surface-entity-list">
+  ${entities
+    .map((e) => {
+      const exposure = getExposureLevel(e.id);
+      return `
+      <div class="surface-entity-item" onclick="switchTab('datamodel'); setTimeout(() => selectEntity('${e.id}'), 50);">
+        <span class="detail-tag badge-${e.kind}">${e.kind}</span>
+        <span class="surface-entity-name">${e.name}</span>
+        <span class="surface-entity-exposure">
+          <span class="exposure-dot exposure-${exposure}"></span>
+          ${getExposureLabel(e.id)}
+        </span>
+      </div>
+    `;
+    })
+    .join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${
+(feature.implementations || []).length
+  ? `
+    <div class="feature-section">
+<div class="feature-section-title">Key Implementations</div>
+${feature.implementations
+  .map(
+    (impl) => `
+  <div class="feature-impl-item">
+    <div class="feature-impl-desc">${impl.description}</div>
+    <div class="feature-impl-path">${impl.file}</div>
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${(() => {
+const compIds = feature.compartmentIds || [];
+const comps = compIds
+  .map((cid) => (DATA.compartments || []).find((c) => c.id === cid))
+  .filter(Boolean);
+if (comps.length) {
+  return `
+  <div class="feature-section">
+    <div class="feature-section-title">Compartments (${comps.length})</div>
+    <div>
+      ${comps
+        .map(
+          (c) => `
+        <span class="feature-surface-chip" onclick="switchTab('codeorg'); setTimeout(() => selectCompartment('${c.id}'), 50);">
+          ${(c.tags || [])
+            .slice(0, 1)
+            .map((t) => `<span class="codemap-tag-pill">${t}</span>`)
+            .join("")}
+          ${c.name}
+          <span style="font-size:11px;color:var(--text-dim);margin-left:4px;">${(c.files || []).length} files</span>
+        </span>
+      `,
+        )
+        .join("")}
+    </div>
+  </div>`;
+}
+// Backwards compat: if no compartmentIds, show old file map
+if ((feature.files || []).length) {
+  const roleOrder = [
+    "component",
+    "hook",
+    "action",
+    "api",
+    "lib",
+    "type",
+    "config",
+    "style",
+    "test",
+    "other",
+  ];
+  const grouped = {};
+  feature.files.forEach((f) => {
+    const r = f.role || "other";
+    if (!grouped[r]) grouped[r] = [];
+    grouped[r].push(f);
+  });
+  Object.values(grouped).forEach((arr) =>
+    arr.sort((a, b) => a.file.localeCompare(b.file)),
+  );
+  const sortedRoles = Object.keys(grouped).sort((a, b) => {
+    const ai = roleOrder.indexOf(a),
+      bi = roleOrder.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+  return `
+  <div class="feature-section feature-filemap">
+    <div class="feature-filemap-header">
+      <div class="feature-section-title">File Map</div>
+    </div>
+    <div class="feature-filemap-list">
+      ${sortedRoles
+        .map(
+          (role) => `
+        <div style="margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">${role} (${grouped[role].length})</div>
+          ${grouped[role]
+            .map(
+              (f) => `
+            <div class="feature-filemap-entry">
+              <span>${f.file}</span>
+            </div>
+          `,
+            )
+            .join("")}
+        </div>
+      `,
+        )
+        .join("")}
+    </div>
+    <details style="margin-bottom:8px;">
+      <summary style="cursor:pointer;font-size:13px;color:var(--text-muted);margin-bottom:8px;">Regenerate file map</summary>
+      ${renderFileMapPrompt(feature)}
+    </details>
+  </div>`;
+}
+// No compartments and no files — show the prompt to generate
+return `
+<div class="feature-section feature-filemap">
+  <div class="feature-filemap-header">
+    <div class="feature-section-title">File Map</div>
+  </div>
+  <div class="feature-filemap-empty">No files mapped yet. Copy the prompt below and paste it into your AI coding agent to generate the file map.</div>
+  ${renderFileMapPrompt(feature)}
+</div>`;
+    })()}
+  `;
+}
+
+// -- Surface View --
+function selectSurface(id) {
+  selectedSurfaceId = id;
+  renderSidebar();
+
+  const content = document.getElementById("surface-content");
+
+  if (id === "__matrix__") {
+    renderExposureMatrix(content);
+    return;
+  }
+
+  const surface = (DATA.surfaces || []).find((s) => s.id === id);
+  if (!surface) return;
+
+  const entities = (surface.entityIds || [])
+    .map((eid) => DATA.entities.find((e) => e.id === eid))
+    .filter(Boolean);
+  const ops = (surface.operationIds || [])
+    .map((oid) => DATA.operations.find((o) => o.id === oid))
+    .filter(Boolean);
+  const flows = (surface.flowIds || [])
+    .map((fid) => DATA.flows.find((f) => f.id === fid))
+    .filter(Boolean);
+  const features = (DATA.features || []).filter((f) =>
+    (f.surfaceIds || []).includes(id),
+  );
+
+  content.innerHTML = `
+    <div class="surface-header" style="position:relative;">
+<button id="llm-ctx-btn-surface-${surface.id}" onclick="copySurfaceLLMContext('${surface.id}')" style="position:absolute;top:0;right:0;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color 0.15s,color 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">Copy as LLM context</button>
+<div class="surface-title">${surface.name}</div>
+<div class="surface-meta">
+  <span class="detail-tag badge-${surface.actor}">${surface.actor}</span>
+  <span class="detail-tag badge-${surface.confidence}">${surface.confidence}</span>
+  <span class="surface-route">${surface.entrypoint.route}</span>
+</div>
+<div class="detail-desc">${surface.description}</div>
+<div class="impl-path" style="margin-top:6px;">${surface.entrypoint.file}</div>
+    </div>
+
+    ${
+features.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Features (${features.length})</div>
+<div>
+  ${features
+    .map(
+      (f) => `
+    <span class="feature-surface-chip" onclick="switchTab('features'); setTimeout(() => selectFeature('${f.id}'), 50);">
+      <span class="detail-tag badge-${f.kind}">${f.kind}</span>
+      ${f.name}
+    </span>
+  `,
+    )
+    .join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${(() => {
+const compIds = surface.compartmentIds || [];
+const comps = compIds
+  .map((cid) => (DATA.compartments || []).find((c) => c.id === cid))
+  .filter(Boolean);
+if (!comps.length) return "";
+return `
+    <div class="surface-section">
+<div class="surface-section-title">Compartments (${comps.length})</div>
+<div>
+  ${comps
+    .map(
+      (c) => `
+    <span class="feature-surface-chip" onclick="switchTab('codeorg'); setTimeout(() => selectCompartment('${c.id}'), 50);">
+      ${(c.tags || [])
+        .slice(0, 1)
+        .map((t) => `<span class="codemap-tag-pill">${t}</span>`)
+        .join("")}
+      ${c.name}
+      <span style="font-size:11px;color:var(--text-dim);margin-left:4px;">${(c.files || []).length} files</span>
+    </span>
+  `,
+    )
+    .join("")}
+</div>
+    </div>`;
+    })()}
+
+    ${
+entities.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Entities (${entities.length})</div>
+<div class="surface-entity-list">
+  ${entities
+    .map((e) => {
+      const exposure = getExposureLevel(e.id);
+      return `
+      <div class="surface-entity-item" onclick="switchTab('datamodel'); setTimeout(() => selectEntity('${e.id}'), 50);">
+        <span class="detail-tag badge-${e.kind}">${e.kind}</span>
+        <span class="surface-entity-name">${e.name}</span>
+        <span class="surface-entity-exposure">
+          <span class="exposure-dot exposure-${exposure}"></span>
+          ${getExposureLabel(e.id)}
+        </span>
+      </div>
+    `;
+    })
+    .join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${
+ops.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Operations (${ops.length})</div>
+${ops
+  .map(
+    (o) => `
+  <div class="op-card">
+    <div class="op-card-header">
+      <span class="detail-tag badge-${o.type}">${o.type}</span>
+      <span class="op-card-name">${o.name}</span>
+    </div>
+    <div class="op-card-desc">${o.description}</div>
+    <div class="impl-path">${o.implementation.file} → ${o.implementation.function}</div>
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${
+flows.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Flows (${flows.length})</div>
+${flows
+  .map(
+    (f) => `
+  <div class="detail-link" onclick="switchTab('flows'); setTimeout(() => selectFlow('${f.id}'), 50);">
+    <span class="detail-tag badge-${f.actor}" style="margin-right:6px;">${f.actor}</span>
+    ${f.name}
+    <div class="impl-path">${f.description}</div>
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+  `;
+}
+
+function renderExposureMatrix(container) {
+  const surfaces = DATA.surfaces || [];
+  const entities = DATA.entities;
+
+  // Sort entities: cross-cutting first, then shared, then scoped
+  const sorted = [...entities].sort((a, b) => {
+    const aCount = (entitySurfaceMap[a.id] || []).length;
+    const bCount = (entitySurfaceMap[b.id] || []).length;
+    return bCount - aCount;
+  });
+
+  container.innerHTML = `
+    <div class="surface-header">
+<div class="surface-title">Entity Exposure Matrix</div>
+<div class="detail-desc">Which entities appear in which surfaces. Sorted by exposure (most cross-cutting first).</div>
+    </div>
+    <div class="matrix-container">
+<table class="matrix-table">
+  <thead>
+    <tr>
+      <th>Entity</th>
+      <th>Kind</th>
+      ${surfaces.map((s) => `<th class="rotated">${s.name}</th>`).join("")}
+      <th>Exposure</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${sorted
+      .map((entity) => {
+        const exposure = getExposureLevel(entity.id);
+        return `
+        <tr>
+          <td class="entity-cell" onclick="switchTab('datamodel'); setTimeout(() => selectEntity('${entity.id}'), 50);">${entity.name}</td>
+          <td><span class="detail-tag badge-${entity.kind}">${entity.kind}</span></td>
+          ${surfaces
+            .map((s) => {
+              const isIn = (s.entityIds || []).includes(entity.id);
+              return `<td><div class="matrix-dot ${isIn ? "active" : "inactive"}">${isIn ? "●" : "·"}</div></td>`;
+            })
+            .join("")}
+          <td><span class="matrix-exposure-label exposure-label-${exposure}">${exposure}</span></td>
+        </tr>
+      `;
+      })
+      .join("")}
+  </tbody>
+</table>
+    </div>
+  `;
+}
+
+// -- Entity Map (Force-directed Graph) --
+function renderEntityMap() {
+  const container = document.getElementById("entity-map-canvas");
+  const rect = container.getBoundingClientRect();
+  const W = rect.width || 800;
+  const H = rect.height || 600;
+
+  // Build nodes
+  const nodes = DATA.entities.map((e, i) => {
+    const angle = (2 * Math.PI * i) / DATA.entities.length;
+    const radius = Math.min(W, H) * 0.3;
+    return {
+      ...e,
+      x: W / 2 + radius * Math.cos(angle),
+      y: H / 2 + radius * Math.sin(angle),
+      vx: 0,
+      vy: 0,
+      w: Math.max(100, e.name.length * 9 + 24),
+      h: 50,
+    };
+  });
+
+  const nodeMap = {};
+  nodes.forEach((n) => (nodeMap[n.id] = n));
+
+  // Build edges
+  const edges = DATA.relationships
+    .filter((r) => nodeMap[r.from] && nodeMap[r.to])
+    .map((r) => ({
+      ...r,
+      source: nodeMap[r.from],
+      target: nodeMap[r.to],
+    }));
+
+  // Force simulation
+  function simulate() {
+    const k = 0.01;
+    const repulsion = 8000;
+    const damping = 0.85;
+
+    for (let iter = 0; iter < 150; iter++) {
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          let dx = nodes[j].x - nodes[i].x;
+          let dy = nodes[j].y - nodes[i].y;
+          let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          let force = repulsion / (dist * dist);
+          let fx = (dx / dist) * force;
+          let fy = (dy / dist) * force;
+          nodes[i].vx -= fx;
+          nodes[i].vy -= fy;
+          nodes[j].vx += fx;
+          nodes[j].vy += fy;
+        }
+      }
+
+      edges.forEach((e) => {
+        let dx = e.target.x - e.source.x;
+        let dy = e.target.y - e.source.y;
+        let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        let force = (dist - 200) * k;
+        let fx = (dx / dist) * force;
+        let fy = (dy / dist) * force;
+        e.source.vx += fx;
+        e.source.vy += fy;
+        e.target.vx -= fx;
+        e.target.vy -= fy;
+      });
+
+      nodes.forEach((n) => {
+        n.vx += (W / 2 - n.x) * 0.001;
+        n.vy += (H / 2 - n.y) * 0.001;
+        n.vx *= damping;
+        n.vy *= damping;
+        n.x += n.vx;
+        n.y += n.vy;
+        n.x = Math.max(n.w / 2 + 10, Math.min(W - n.w / 2 - 10, n.x));
+        n.y = Math.max(n.h / 2 + 10, Math.min(H - n.h / 2 - 10, n.y));
+      });
+    }
+  }
+
+  simulate();
+
+  // Render SVG
+  const svgNS = ["http:", "", "www.w3.org", "2000", "svg"].join("/");
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("width", W);
+  svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+  let viewBox = { x: 0, y: 0, w: W, h: H };
+  let isPanning = false;
+  let panStart = { x: 0, y: 0 };
+  let dragNode = null;
+
+  function updateViewBox() {
+    svg.setAttribute(
+      "viewBox",
+      `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`,
+    );
+  }
+
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const scale = e.deltaY > 0 ? 1.08 : 0.92;
+    const mouseX = viewBox.x + (e.offsetX / W) * viewBox.w;
+    const mouseY = viewBox.y + (e.offsetY / H) * viewBox.h;
+    const newW = viewBox.w * scale;
+    const newH = viewBox.h * scale;
+    viewBox.x = mouseX - (mouseX - viewBox.x) * scale;
+    viewBox.y = mouseY - (mouseY - viewBox.y) * scale;
+    viewBox.w = newW;
+    viewBox.h = newH;
+    updateViewBox();
+  });
+
+  svg.addEventListener("mousedown", (e) => {
+    if (
+      e.target === svg ||
+      e.target.tagName === "line" ||
+      e.target.classList.contains("edge-label")
+    ) {
+      isPanning = true;
+      panStart = { x: e.clientX, y: e.clientY };
+    }
+  });
+
+  svg.addEventListener("mousemove", (e) => {
+    if (isPanning) {
+      const dx = (e.clientX - panStart.x) * (viewBox.w / W);
+      const dy = (e.clientY - panStart.y) * (viewBox.h / H);
+      viewBox.x -= dx;
+      viewBox.y -= dy;
+      panStart = { x: e.clientX, y: e.clientY };
+      updateViewBox();
+    }
+    if (dragNode) {
+      const svgRect = svg.getBoundingClientRect();
+      dragNode.x =
+        viewBox.x +
+        ((e.clientX - svgRect.left) / svgRect.width) * viewBox.w;
+      dragNode.y =
+        viewBox.y +
+        ((e.clientY - svgRect.top) / svgRect.height) * viewBox.h;
+      renderGraph();
+    }
+  });
+
+  svg.addEventListener("mouseup", () => {
+    isPanning = false;
+    dragNode = null;
+  });
+
+  svg.addEventListener("mouseleave", () => {
+    isPanning = false;
+    dragNode = null;
+  });
+
+  container.innerHTML = "";
+  container.appendChild(svg);
+
+  function renderGraph() {
+    svg.innerHTML = "";
+
+    edges.forEach((e) => {
+      const line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", e.source.x);
+      line.setAttribute("y1", e.source.y);
+      line.setAttribute("x2", e.target.x);
+      line.setAttribute("y2", e.target.y);
+      line.classList.add("edge-line");
+      svg.appendChild(line);
+
+      const midX = (e.source.x + e.target.x) / 2;
+      const midY = (e.source.y + e.target.y) / 2;
+      const label = document.createElementNS(svgNS, "text");
+      label.setAttribute("x", midX);
+      label.setAttribute("y", midY - 6);
+      label.classList.add("edge-label");
+      label.textContent = e.type;
+      svg.appendChild(label);
+    });
+
+    nodes.forEach((n) => {
+      const g = document.createElementNS(svgNS, "g");
+      g.classList.add("node-group");
+      if (selectedEntityId === n.id) g.classList.add("node-selected");
+
+      const colors = KIND_COLORS[n.kind] || DEFAULT_COLOR;
+      const isLow = n.confidence === "low";
+
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", n.x - n.w / 2);
+      rect.setAttribute("y", n.y - n.h / 2);
+      rect.setAttribute("width", n.w);
+      rect.setAttribute("height", n.h);
+      rect.setAttribute("fill", colors.fill);
+      rect.setAttribute("stroke", colors.stroke);
+      rect.classList.add("node-rect");
+      if (isLow) rect.setAttribute("stroke-dasharray", "4 3");
+      g.appendChild(rect);
+
+      const text = document.createElementNS(svgNS, "text");
+      text.setAttribute("x", n.x);
+      text.setAttribute("y", n.y - 4);
+      text.classList.add("node-label");
+      text.textContent = n.name;
+      g.appendChild(text);
+
+      const kind = document.createElementNS(svgNS, "text");
+      kind.setAttribute("x", n.x);
+      kind.setAttribute("y", n.y + 12);
+      kind.classList.add("node-kind");
+      kind.textContent = n.kind;
+      g.appendChild(kind);
+
+      g.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectEntity(n.id);
+      });
+
+      g.addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+        dragNode = n;
+      });
+
+      svg.appendChild(g);
+    });
+  }
+
+  renderGraph();
+  container._renderGraph = renderGraph;
+}
+
+// -- Entity Detail --
+function selectEntity(id) {
+  selectedEntityId = id;
+  const entity = DATA.entities.find((e) => e.id === id);
+  if (!entity) return;
+
+  renderSidebar();
+  highlightNode(id);
+
+  const panel = document.getElementById("entity-detail");
+  panel.classList.add("open");
+
+  const rels = DATA.relationships.filter(
+    (r) => r.from === id || r.to === id,
+  );
+  const ops = DATA.operations.filter((o) => o.entityId === id);
+  const flows = DATA.flows.filter((f) =>
+    f.steps.some((s) => s.entityId === id),
+  );
+  const surfaces = (DATA.surfaces || []).filter((s) =>
+    (s.entityIds || []).includes(id),
+  );
+  const features = (DATA.features || []).filter((f) =>
+    (f.entityIds || []).includes(id),
+  );
+  const exposure = getExposureLevel(id);
+
+  panel.innerHTML = `
+    <div class="detail-header">
+<div>
+  <div class="detail-title">${entity.name}</div>
+  <div style="margin-top:4px;">
+    <span class="detail-tag badge-${entity.kind}">${entity.kind}</span>
+    <span class="detail-tag badge-${entity.confidence}">${entity.confidence}</span>
+    <span class="matrix-exposure-label exposure-label-${exposure}" style="margin-left:4px;">${exposure}</span>
+  </div>
+  <button id="llm-ctx-btn-entity-${entity.id}" onclick="copyEntityLLMContext('${entity.id}')" style="margin-top:8px;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:border-color 0.15s,color 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">Copy as LLM context</button>
+</div>
+<span class="detail-close" onclick="closeDetail()">&times;</span>
+    </div>
+
+    <div class="detail-section">
+<div class="detail-section-title">Description</div>
+<div class="detail-desc">${entity.description}</div>
+    </div>
+
+    <div class="detail-section">
+<div class="detail-section-title">Source</div>
+<div class="impl-path">${entity.source.file}:${entity.source.line}</div>
+    </div>
+
+    ${
+entity.fields.length
+  ? `
+    <div class="detail-section">
+<div class="detail-section-title">Fields</div>
+${entity.fields
+  .map(
+    (f) => `
+  <div class="field-row">
+    <span class="field-name">${f.name}</span>
+    <span class="field-type">${f.type}</span>
+    <span class="field-desc">${f.description}</span>
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${
+rels.length
+  ? `
+    <div class="detail-section">
+<div class="detail-section-title">Relationships</div>
+${rels
+  .map((r) => {
+    const other =
+      r.from === id
+        ? DATA.entities.find((e) => e.id === r.to)
+        : DATA.entities.find((e) => e.id === r.from);
+    const label =
+      r.from === id
+        ? `${r.type} → ${other?.name || r.to}`
+        : `← ${r.type} ${other?.name || r.from}`;
+    return `<div class="detail-link" onclick="selectEntity('${other?.id}')">${label}<div class="impl-path">${r.description}</div></div>`;
+  })
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${
+ops.length
+  ? `
+    <div class="detail-section">
+<div class="detail-section-title">Operations (${ops.length})</div>
+${ops
+  .map(
+    (o) => `
+  <div class="op-card">
+    <div class="op-card-header">
+      <span class="detail-tag badge-${o.type}">${o.type}</span>
+      <span class="op-card-name">${o.name}</span>
+      <span class="detail-tag badge-${o.confidence}" style="margin-left:auto;">${o.confidence}</span>
+    </div>
+    <div class="op-card-desc">${o.description}</div>
+    <div class="impl-path">${o.implementation.file} → ${o.implementation.function}</div>
+    ${o.sideEffects.length ? `<div class="op-card-effects">Side effects: ${o.sideEffects.join("; ")}</div>` : ""}
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${
+surfaces.length
+  ? `
+    <div class="detail-section">
+<div class="detail-section-title">Surfaces (${surfaces.length})</div>
+${surfaces
+  .map(
+    (s) => `
+  <div class="detail-link" onclick="switchTab('surfaces'); setTimeout(() => selectSurface('${s.id}'), 50);">
+    <span class="detail-tag badge-${s.actor}" style="margin-right:6px;">${s.actor}</span>${s.name}
+    <div class="impl-path">${s.entrypoint.route}</div>
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${
+features.length
+  ? `
+    <div class="detail-section">
+<div class="detail-section-title">Used by Features (${features.length})</div>
+${features
+  .map(
+    (f) => `
+  <div class="detail-link" onclick="switchTab('features'); setTimeout(() => selectFeature('${f.id}'), 50);">
+    <span class="detail-tag badge-${f.kind}" style="margin-right:6px;">${f.kind}</span>${f.name}
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${
+flows.length
+  ? `
+    <div class="detail-section">
+<div class="detail-section-title">Participates in Flows</div>
+${flows
+  .map(
+    (f) => `
+  <div class="detail-link" onclick="switchTab('flows'); setTimeout(() => selectFlow('${f.id}'), 50);">${f.name}</div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+  `;
+}
+
+function highlightNode(id) {
+  document
+    .querySelectorAll(".node-group")
+    .forEach((g) => g.classList.remove("node-selected"));
+  const canvas = document.getElementById("entity-map-canvas");
+  if (canvas._renderGraph) canvas._renderGraph();
+}
+
+function closeDetail() {
+  selectedEntityId = null;
+  document.getElementById("entity-detail").classList.remove("open");
+  renderSidebar();
+  highlightNode(null);
+}
+
+// -- Flow View --
+function selectFlow(id) {
+  selectedFlowId = id;
+  const flow = DATA.flows.find((f) => f.id === id);
+  if (!flow) return;
+
+  renderSidebar();
+
+  const content = document.getElementById("flow-content");
+  content.innerHTML = `
+    <div style="position:relative;">
+<button id="llm-ctx-btn-flow-${flow.id}" onclick="copyFlowLLMContext('${flow.id}')" style="position:absolute;top:0;right:0;background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color 0.15s,color 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">Copy as LLM context</button>
+<div class="flow-title">${flow.name}</div>
+    </div>
+    <div class="flow-meta">
+<span><span class="detail-tag badge-${flow.actor}">${flow.actor}</span></span>
+<span><span class="detail-tag badge-${flow.confidence}">${flow.confidence}</span></span>
+    </div>
+    <div class="detail-desc" style="margin-bottom:8px;">${flow.description}</div>
+    <div class="detail-desc" style="margin-bottom:24px; font-style:italic;">Trigger: ${flow.trigger}</div>
+
+    <div class="flow-steps">
+${flow.steps
+  .map((step) => {
+    const op = step.operationId
+      ? DATA.operations.find((o) => o.id === step.operationId)
+      : null;
+    const entity = step.entityId
+      ? DATA.entities.find((e) => e.id === step.entityId)
+      : null;
+    return `
+    <div class="flow-step">
+      <div class="flow-step-num">Step ${step.order}</div>
+      <div class="flow-step-desc">${step.description}</div>
+      <div class="flow-step-tags">
+        ${op ? `<span class="detail-tag badge-${op.type}">${op.name}</span>` : ""}
+        ${entity ? `<span class="detail-tag badge-${entity.kind}" style="cursor:pointer;" onclick="switchTab('datamodel'); setTimeout(() => selectEntity('${entity.id}'), 50);">${entity.name}</span>` : ""}
+      </div>
+      <div class="impl-path">${step.implementation.file} → ${step.implementation.function}</div>
+    </div>
+  `;
+  })
+  .join("")}
+    </div>
+  `;
+}
+
+// -- Code Map --
+function getCompartmentChildren(parentId) {
+  return (DATA.compartments || []).filter((c) => c.parentId === parentId);
+}
+
+function getCompartmentUsedBy(compId) {
+  return (DATA.compartments || []).filter((c) =>
+    (c.dependsOn || []).includes(compId),
+  );
+}
+
+function renderCodemapView() {
+  if (codemapView === "graph") {
+    renderCodemapGraph();
+  }
+}
+
+function selectCompartment(id) {
+  selectedCompartmentId = id;
+  codemapView = "tree";
+  renderSidebar();
+  renderCompartmentDetail(id);
+}
+
+function renderCompartmentDetail(id) {
+  const compartments = DATA.compartments || [];
+  const comp = compartments.find((c) => c.id === id);
+  if (!comp) return;
+
+  const emptyEl = document.getElementById("codemap-empty");
+  const detailEl = document.getElementById("codemap-detail-view");
+  const graphEl = document.getElementById("codemap-graph-view");
+  emptyEl.style.display = "none";
+  detailEl.style.display = "block";
+  graphEl.style.display = "none";
+
+  const children = getCompartmentChildren(comp.id);
+  const parent = comp.parentId
+    ? compartments.find((c) => c.id === comp.parentId)
+    : null;
+  const features = (comp.featureIds || [])
+    .map((fid) => (DATA.features || []).find((f) => f.id === fid))
+    .filter(Boolean);
+  const surfaces = (comp.surfaceIds || [])
+    .map((sid) => (DATA.surfaces || []).find((s) => s.id === sid))
+    .filter(Boolean);
+  const dependsOn = (comp.dependsOn || [])
+    .map((did) => compartments.find((c) => c.id === did))
+    .filter(Boolean);
+  const usedBy = getCompartmentUsedBy(comp.id);
+
+  // Group files by role
+  const files = comp.files || [];
+  const roleOrder = [
+    "component",
+    "hook",
+    "action",
+    "api",
+    "lib",
+    "type",
+    "config",
+    "style",
+    "test",
+    "other",
+  ];
+  const grouped = {};
+  files.forEach((f) => {
+    const r = f.role || "other";
+    if (!grouped[r]) grouped[r] = [];
+    grouped[r].push(f);
+  });
+  Object.values(grouped).forEach((arr) =>
+    arr.sort((a, b) => a.file.localeCompare(b.file)),
+  );
+  const sortedRoles = Object.keys(grouped).sort((a, b) => {
+    const ai = roleOrder.indexOf(a),
+      bi = roleOrder.indexOf(b);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+
+  detailEl.innerHTML = `
+    <div class="codemap-header" style="position:relative;">
+<div style="display:flex;gap:8px;position:absolute;top:0;right:0;">
+  <button class="codemap-toggle-btn${codemapView === "tree" ? " active" : ""}" onclick="codemapView='tree';renderCompartmentDetail('${comp.id}')">Tree View</button>
+  <button class="codemap-toggle-btn${codemapView === "graph" ? " active" : ""}" onclick="showCodemapGraph()">Dependency Graph</button>
+  <button id="llm-ctx-btn-comp-${comp.id}" onclick="copyCompartmentLLMContext('${comp.id}')" style="background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color 0.15s,color 0.15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-muted)'">Copy as LLM context</button>
+</div>
+<div class="codemap-title">${comp.name}</div>
+<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+  <span class="detail-tag badge-${comp.confidence}">${comp.confidence}</span>
+  ${(comp.tags || []).map((t) => `<span class="codemap-tag-pill">${t}</span>`).join("")}
+</div>
+<div class="detail-desc" style="margin-top:8px;">${comp.description}</div>
+${parent ? `<div style="margin-top:6px;font-size:12px;color:var(--text-dim);">Parent: <span class="codemap-dep-link" onclick="selectCompartment('${parent.id}')">${parent.name}</span></div>` : ""}
+    </div>
+
+    ${renderEngHealthFocusNotice("codeorg")}
+
+    ${
+children.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Sub-compartments (${children.length})</div>
+<div class="surface-entity-list">
+  ${children
+    .map(
+      (c) => `
+    <div class="surface-entity-item" onclick="expandedCompartments['${comp.id}']=true; selectCompartment('${c.id}');">
+      <span class="surface-entity-name">${c.name}</span>
+      <span class="surface-entity-exposure">
+        <span style="font-size:11px;color:var(--text-dim);">${(c.files || []).length} files</span>
+      </span>
+    </div>
+  `,
+    )
+    .join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${
+sortedRoles.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Files (${files.length})</div>
+${sortedRoles
+  .map(
+    (role) => `
+  <div style="margin-bottom:12px;">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px;">${role} (${grouped[role].length})</div>
+    ${grouped[role]
+      .map(
+        (f) => `
+      <div class="feature-filemap-entry">
+        <span>${f.file}</span>
+      </div>
+    `,
+      )
+      .join("")}
+  </div>
+`,
+  )
+  .join("")}
+    </div>`
+  : ""
+    }
+
+    ${
+features.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Linked Features (${features.length})</div>
+<div>
+  ${features
+    .map(
+      (f) => `
+    <span class="feature-surface-chip" onclick="switchTab('features'); setTimeout(() => selectFeature('${f.id}'), 50);">
+      <span class="detail-tag badge-${f.kind}">${f.kind}</span>
+      ${f.name}
+    </span>
+  `,
+    )
+    .join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${
+surfaces.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Linked Surfaces (${surfaces.length})</div>
+<div>
+  ${surfaces
+    .map(
+      (s) => `
+    <span class="feature-surface-chip" onclick="switchTab('surfaces'); setTimeout(() => selectSurface('${s.id}'), 50);">
+      <span class="detail-tag badge-${s.actor}">${s.actor}</span>
+      ${s.name}
+    </span>
+  `,
+    )
+    .join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${
+dependsOn.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Depends On (${dependsOn.length})</div>
+<div style="display:flex;flex-wrap:wrap;gap:4px;">
+  ${dependsOn.map((d) => `<span class="codemap-dep-link" onclick="selectCompartment('${d.id}')">${d.name}</span>`).join("")}
+</div>
+    </div>`
+  : ""
+    }
+
+    ${
+usedBy.length
+  ? `
+    <div class="surface-section">
+<div class="surface-section-title">Used By (${usedBy.length})</div>
+<div style="display:flex;flex-wrap:wrap;gap:4px;">
+  ${usedBy.map((u) => `<span class="codemap-dep-link" onclick="selectCompartment('${u.id}')">${u.name}</span>`).join("")}
+</div>
+    </div>`
+  : ""
+    }
+  `;
+}
+
+function showCodemapGraph() {
+  codemapView = "graph";
+  const emptyEl = document.getElementById("codemap-empty");
+  const detailEl = document.getElementById("codemap-detail-view");
+  const graphEl = document.getElementById("codemap-graph-view");
+  emptyEl.style.display = "none";
+  detailEl.style.display = "none";
+  graphEl.style.display = "flex";
+  renderCodemapGraph();
+}
+
+function renderCodemapGraph() {
+  const container = document.getElementById("codemap-graph-canvas");
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  const W = rect.width || 800;
+  const H = rect.height || 600;
+
+  const compartments = DATA.compartments || [];
+  if (compartments.length === 0) {
+    container.innerHTML =
+      '<div class="empty-state">No compartment data available</div>';
+    return;
+  }
+
+  // Use top-level compartments as nodes
+  const topLevel = compartments.filter((c) => !c.parentId);
+  const nodes = topLevel.map((c, i) => {
+    const angle = (2 * Math.PI * i) / topLevel.length;
+    const radius = Math.min(W, H) * 0.3;
+    const fileCount = (c.files || []).length;
+    return {
+      ...c,
+      x: W / 2 + radius * Math.cos(angle),
+      y: H / 2 + radius * Math.sin(angle),
+      vx: 0,
+      vy: 0,
+      w: Math.max(120, c.name.length * 8 + 30),
+      h: 50,
+      fileCount,
+    };
+  });
+
+  const nodeMap = {};
+  nodes.forEach((n) => (nodeMap[n.id] = n));
+
+  // Build edges from dependsOn
+  const edges = [];
+  nodes.forEach((n) => {
+    (n.dependsOn || []).forEach((depId) => {
+      if (nodeMap[depId]) {
+        edges.push({
+          source: nodeMap[n.id],
+          target: nodeMap[depId],
+          type: "depends-on",
+        });
+      }
+    });
+  });
+
+  // Force simulation (same pattern as entity map)
+  const k = 0.01;
+  const repulsion = 10000;
+  const damping = 0.85;
+
+  for (let iter = 0; iter < 150; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        let dx = nodes[j].x - nodes[i].x;
+        let dy = nodes[j].y - nodes[i].y;
+        let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        let force = repulsion / (dist * dist);
+        let fx = (dx / dist) * force;
+        let fy = (dy / dist) * force;
+        nodes[i].vx -= fx;
+        nodes[i].vy -= fy;
+        nodes[j].vx += fx;
+        nodes[j].vy += fy;
+      }
+    }
+    edges.forEach((e) => {
+      let dx = e.target.x - e.source.x;
+      let dy = e.target.y - e.source.y;
+      let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      let force = (dist - 200) * k;
+      let fx = (dx / dist) * force;
+      let fy = (dy / dist) * force;
+      e.source.vx += fx;
+      e.source.vy += fy;
+      e.target.vx -= fx;
+      e.target.vy -= fy;
+    });
+    nodes.forEach((n) => {
+      n.vx += (W / 2 - n.x) * 0.001;
+      n.vy += (H / 2 - n.y) * 0.001;
+      n.vx *= damping;
+      n.vy *= damping;
+      n.x += n.vx;
+      n.y += n.vy;
+      n.x = Math.max(n.w / 2 + 10, Math.min(W - n.w / 2 - 10, n.x));
+      n.y = Math.max(n.h / 2 + 10, Math.min(H - n.h / 2 - 10, n.y));
+    });
+  }
+
+  const svgNS = ["http:", "", "www.w3.org", "2000", "svg"].join("/");
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("width", W);
+  svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+  let viewBox = { x: 0, y: 0, w: W, h: H };
+  let isPanning = false;
+  let panStart = { x: 0, y: 0 };
+
+  function updateViewBox() {
+    svg.setAttribute(
+      "viewBox",
+      `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`,
+    );
+  }
+
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const scale = e.deltaY > 0 ? 1.08 : 0.92;
+    const mouseX = viewBox.x + (e.offsetX / W) * viewBox.w;
+    const mouseY = viewBox.y + (e.offsetY / H) * viewBox.h;
+    viewBox.x = mouseX - (mouseX - viewBox.x) * scale;
+    viewBox.y = mouseY - (mouseY - viewBox.y) * scale;
+    viewBox.w *= scale;
+    viewBox.h *= scale;
+    updateViewBox();
+  });
+  svg.addEventListener("mousedown", (e) => {
+    if (
+      e.target === svg ||
+      e.target.tagName === "line" ||
+      e.target.classList.contains("edge-label")
+    ) {
+      isPanning = true;
+      panStart = { x: e.clientX, y: e.clientY };
+    }
+  });
+  svg.addEventListener("mousemove", (e) => {
+    if (isPanning) {
+      const dx = (e.clientX - panStart.x) * (viewBox.w / W);
+      const dy = (e.clientY - panStart.y) * (viewBox.h / H);
+      viewBox.x -= dx;
+      viewBox.y -= dy;
+      panStart = { x: e.clientX, y: e.clientY };
+      updateViewBox();
+    }
+  });
+  svg.addEventListener("mouseup", () => {
+    isPanning = false;
+  });
+  svg.addEventListener("mouseleave", () => {
+    isPanning = false;
+  });
+
+  // Draw edges with arrowheads
+  const defs = document.createElementNS(svgNS, "defs");
+  const marker = document.createElementNS(svgNS, "marker");
+  marker.setAttribute("id", "arrowhead");
+  marker.setAttribute("viewBox", "0 0 10 7");
+  marker.setAttribute("refX", "10");
+  marker.setAttribute("refY", "3.5");
+  marker.setAttribute("markerWidth", "8");
+  marker.setAttribute("markerHeight", "6");
+  marker.setAttribute("orient", "auto");
+  const polygon = document.createElementNS(svgNS, "polygon");
+  polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+  polygon.setAttribute("fill", "var(--border-hover)");
+  marker.appendChild(polygon);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  edges.forEach((e) => {
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", e.source.x);
+    line.setAttribute("y1", e.source.y);
+    line.setAttribute("x2", e.target.x);
+    line.setAttribute("y2", e.target.y);
+    line.classList.add("edge-line");
+    line.setAttribute("marker-end", "url(#arrowhead)");
+    svg.appendChild(line);
+  });
+
+  // Tag color map
+  const tagColors = {
+    ui: { fill: "rgba(155,111,205,0.14)", stroke: "#9b6fcd" },
+    "data-access": { fill: "rgba(91,141,239,0.14)", stroke: "#5b8def" },
+    "business-logic": {
+      fill: "rgba(200,167,80,0.14)",
+      stroke: "#c8a750",
+    },
+    api: { fill: "rgba(78,173,122,0.14)", stroke: "#4ead7a" },
+    "api-integration": {
+      fill: "rgba(91,141,239,0.14)",
+      stroke: "#5b8def",
+    },
+    infrastructure: { fill: "rgba(200,180,74,0.14)", stroke: "#c8b44a" },
+    shared: { fill: "rgba(212,107,138,0.14)", stroke: "#d46b8a" },
+    auth: { fill: "rgba(205,92,92,0.14)", stroke: "#cd5c5c" },
+  };
+
+  nodes.forEach((n) => {
+    const g = document.createElementNS(svgNS, "g");
+    g.classList.add("node-group");
+    if (selectedCompartmentId === n.id) g.classList.add("node-selected");
+    if (doesCompartmentTreeContainHealthHighlight(n.id))
+      g.classList.add("node-health-highlight");
+
+    const primaryTag = (n.tags || [])[0];
+    const colors = tagColors[primaryTag] || {
+      fill: "rgba(91,141,239,0.14)",
+      stroke: "#5b8def",
+    };
+
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("x", n.x - n.w / 2);
+    rect.setAttribute("y", n.y - n.h / 2);
+    rect.setAttribute("width", n.w);
+    rect.setAttribute("height", n.h);
+    rect.setAttribute("fill", colors.fill);
+    rect.setAttribute("stroke", colors.stroke);
+    rect.classList.add("node-rect");
+    g.appendChild(rect);
+
+    const text = document.createElementNS(svgNS, "text");
+    text.setAttribute("x", n.x);
+    text.setAttribute("y", n.y - 4);
+    text.classList.add("node-label");
+    text.textContent = n.name;
+    g.appendChild(text);
+
+    const sub = document.createElementNS(svgNS, "text");
+    sub.setAttribute("x", n.x);
+    sub.setAttribute("y", n.y + 12);
+    sub.classList.add("node-kind");
+    sub.textContent = `${n.fileCount} files`;
+    g.appendChild(sub);
+
+    g.addEventListener("click", (e) => {
+      e.stopPropagation();
+      codemapView = "tree";
+      selectCompartment(n.id);
+    });
+
+    svg.appendChild(g);
+  });
+
+  container.innerHTML = "";
+  container.appendChild(svg);
+
+  // Add a back button overlay
+  const backBtn = document.createElement("button");
+  backBtn.className = "codemap-toggle-btn";
+  backBtn.style.cssText =
+    "position:absolute;top:12px;left:12px;z-index:10;";
+  backBtn.textContent = "← Tree View";
+  backBtn.addEventListener("click", () => {
+    codemapView = "tree";
+    if (selectedCompartmentId) {
+      renderCompartmentDetail(selectedCompartmentId);
+    } else {
+      document.getElementById("codemap-empty").style.display = "flex";
+      document.getElementById("codemap-detail-view").style.display =
+        "none";
+      document.getElementById("codemap-graph-view").style.display =
+        "none";
+    }
+  });
+  const graphContainer = document.getElementById("codemap-graph-view");
+  // Remove old back buttons
+  graphContainer
+    .querySelectorAll(".codemap-toggle-btn")
+    .forEach((b) => b.remove());
+  graphContainer.appendChild(backBtn);
+}
+
+// -- Compartment LLM Context --
+function buildCompartmentLLMContext(comp) {
+  const compartments = DATA.compartments || [];
+  const children = getCompartmentChildren(comp.id);
+  const features = (comp.featureIds || [])
+    .map((fid) => (DATA.features || []).find((f) => f.id === fid))
+    .filter(Boolean);
+  const surfaces = (comp.surfaceIds || [])
+    .map((sid) => (DATA.surfaces || []).find((s) => s.id === sid))
+    .filter(Boolean);
+  const dependsOn = (comp.dependsOn || [])
+    .map((did) => compartments.find((c) => c.id === did))
+    .filter(Boolean);
+  const usedBy = getCompartmentUsedBy(comp.id);
+
+  let ctx = `# Compartment: ${comp.name}
+
+> Generated by the **Cartograph** skill (\`.agents/skills/cartograph/\`), from \`.cartograph/mapping.json\`. See \`.cartograph/mapping.json\` for the full codebase map — surfaces, features, entities, relationships, operations, flows, and compartments.
+
+In Cartograph, a **compartment** is a logical grouping of related files that form a cohesive unit of functionality. Compartments bridge the product-side view (surfaces, features) with the underlying code structure — they answer "if I want to understand or modify this area of functionality, which files do I need to look at?" Compartments are nestable, and files can appear in multiple compartments.
+
+## Overview
+- **ID**: \`${comp.id}\`
+- **Confidence**: ${comp.confidence}
+- **Tags**: ${(comp.tags || []).join(", ") || "none"}
+- **Description**: ${comp.description}
+`;
+
+  if (children.length) {
+    ctx += `\n## Sub-compartments\n`;
+    children.forEach((c) => {
+      ctx += `- **${c.name}** — ${c.description} (${(c.files || []).length} files)\n`;
+    });
+  }
+
+  const files = comp.files || [];
+  if (files.length) {
+    const roleOrder = [
+      "component",
+      "hook",
+      "action",
+      "api",
+      "lib",
+      "type",
+      "config",
+      "style",
+      "test",
+      "other",
+    ];
+    const grouped = {};
+    files.forEach((f) => {
+      const r = f.role || "other";
+      if (!grouped[r]) grouped[r] = [];
+      grouped[r].push(f);
+    });
+    Object.values(grouped).forEach((arr) =>
+      arr.sort((a, b) => a.file.localeCompare(b.file)),
+    );
+    const sortedRoles = Object.keys(grouped).sort((a, b) => {
+      const ai = roleOrder.indexOf(a),
+        bi = roleOrder.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+    ctx += `\n## Files (${files.length})\n`;
+    sortedRoles.forEach((role) => {
+      ctx += `\n### ${role} (${grouped[role].length})\n`;
+      grouped[role].forEach((f) => {
+        ctx += `- \`${f.file}\`\n`;
+      });
+    });
+  }
+
+  if (features.length) {
+    ctx += `\n## Linked Features\n`;
+    features.forEach((f) => {
+      ctx += `- **${f.name}** (\`${f.kind}\`) — ${f.description}\n`;
+    });
+  }
+
+  if (surfaces.length) {
+    ctx += `\n## Linked Surfaces\n`;
+    surfaces.forEach((s) => {
+      ctx += `- **${s.name}** (\`${s.entrypoint.route}\`) — ${s.description}\n`;
+    });
+  }
+
+  if (dependsOn.length) {
+    ctx += `\n## Dependencies\n**Depends on:** ${dependsOn.map((d) => d.name).join(", ")}\n`;
+  }
+  if (usedBy.length) {
+    ctx += `**Used by:** ${usedBy.map((u) => u.name).join(", ")}\n`;
+  }
+
+  return ctx;
+}
+
+function copyCompartmentLLMContext(compId) {
+  const comp = (DATA.compartments || []).find((c) => c.id === compId);
+  if (!comp) return;
+  const ctx = buildCompartmentLLMContext(comp);
+  navigator.clipboard.writeText(ctx).then(() => {
+    const btn = document.getElementById("llm-ctx-btn-comp-" + compId);
+    if (btn) {
+      btn.textContent = "Copied!";
+      setTimeout(() => {
+        btn.textContent = "Copy as LLM context";
+      }, 2000);
+    }
+  });
+}
+
+// -- File Tree: Color palette --
+const FILE_TREE_PALETTE = [
+  "#5b8def",
+  "#cd5c5c",
+  "#4ead7a",
+  "#c8a750",
+  "#9b6fcd",
+  "#5b8def",
+  "#d46b8a",
+  "#c8b44a",
+  "#4ead7a",
+  "#d47f4a",
+  "#9b6fcd",
+  "#4ead7a",
+  "#cd5c5c",
+  "#5b8def",
+  "#d46b8a",
+  "#c8b44a",
+  "#cd5c5c",
+  "#9b6fcd",
+  "#c8a750",
+  "#4ead7a",
+];
+const FILE_TREE_INFRA_COLOR = "#5c584e";
+const FILE_TREE_OTHER_COLOR = "#3a3832";
+
+function computeFileTreeColors() {
+  fileTreeColorMap = {};
+  if (!DATA.fileTree || !DATA.fileTree.length) return;
+
+  // Collect all unique feature IDs from fileTree
+  const featureIds = new Set();
+  DATA.fileTree.forEach((entry) => {
+    (entry.featureWeights || []).forEach((fw) => {
+      featureIds.add(fw.featureId);
+    });
+  });
+
+  // Sort alphabetically, excluding __infrastructure__
+  const sorted = [...featureIds]
+    .filter((id) => id !== "__infrastructure__")
+    .sort();
+
+  // Assign colors deterministically
+  sorted.forEach((id, i) => {
+    fileTreeColorMap[id] =
+      FILE_TREE_PALETTE[i % FILE_TREE_PALETTE.length];
+  });
+
+  // Infrastructure always gets gray
+  fileTreeColorMap["__infrastructure__"] = FILE_TREE_INFRA_COLOR;
+}
+
+// -- File Tree: Build tree structure from flat file list --
+function buildFileTreeStructure() {
+  const fileTree = DATA.fileTree || [];
+  if (!fileTree.length) return null;
+
+  const root = {
+    name: "",
+    children: {},
+    files: [],
+    isDir: true,
+    path: "",
+  };
+
+  fileTree.forEach((entry) => {
+    const parts = entry.file.split("/");
+    let current = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const dirName = parts[i];
+      const dirPath = parts.slice(0, i + 1).join("/");
+      if (!current.children[dirName]) {
+        current.children[dirName] = {
+          name: dirName,
+          children: {},
+          files: [],
+          isDir: true,
+          path: dirPath,
+        };
+      }
+      current = current.children[dirName];
+    }
+    const fileName = parts[parts.length - 1];
+    current.files.push({
+      name: fileName,
+      path: entry.file,
+      featureWeights: entry.featureWeights || [],
+    });
+  });
+
+  return root;
+}
+
+// -- File Tree: Aggregate feature weights for a directory --
+function aggregateDirWeights(node) {
+  const weightSums = {};
+  let fileCount = 0;
+
+  // Own files
+  node.files.forEach((f) => {
+    fileCount++;
+    (f.featureWeights || []).forEach((fw) => {
+      weightSums[fw.featureId] =
+        (weightSums[fw.featureId] || 0) + fw.weight;
+    });
+  });
+
+  // Recurse into children
+  Object.values(node.children).forEach((child) => {
+    const childResult = aggregateDirWeights(child);
+    fileCount += childResult.fileCount;
+    Object.entries(childResult.weightSums).forEach(([fid, w]) => {
+      weightSums[fid] = (weightSums[fid] || 0) + w;
+    });
+  });
+
+  // Normalize to 1.0
+  const total = Object.values(weightSums).reduce((a, b) => a + b, 0);
+  const normalized = [];
+  if (total > 0) {
+    Object.entries(weightSums).forEach(([fid, w]) => {
+      normalized.push({ featureId: fid, weight: w / total });
+    });
+    normalized.sort((a, b) => b.weight - a.weight);
+  }
+
+  // Cache on node
+  node._aggregatedWeights = normalized;
+  node._fileCount = fileCount;
+
+  return { weightSums, fileCount };
+}
+
+// -- File Tree: Get top-N weights with "Other" grouping --
+function getTopWeights(weights, topN) {
+  if (!weights || !weights.length) return [];
+  const sorted = [...weights].sort((a, b) => b.weight - a.weight);
+  if (sorted.length <= topN) return sorted;
+  const top = sorted.slice(0, topN);
+  const otherWeight = sorted
+    .slice(topN)
+    .reduce((sum, w) => sum + w.weight, 0);
+  if (otherWeight > 0) {
+    top.push({ featureId: "__other__", weight: otherWeight });
+  }
+  return top;
+}
+
+// -- File Tree: Render the feature bar --
+function renderFeatureBar(weights, barWidth) {
+  const topWeights = getTopWeights(weights, 5);
+  if (!topWeights.length)
+    return '<div class="filetree-no-data">No data</div>';
+
+  const widthStyle = barWidth ? `width:${barWidth}` : "width:100%";
+  let html = `<div class="filetree-bar" style="${widthStyle}">`;
+  topWeights.forEach((fw) => {
+    const pct = (fw.weight * 100).toFixed(1);
+    const isOther = fw.featureId === "__other__";
+    const color = isOther
+      ? FILE_TREE_OTHER_COLOR
+      : fileTreeColorMap[fw.featureId] || FILE_TREE_INFRA_COLOR;
+    const highlightClass =
+      fileTreeHighlightedFeature &&
+      fw.featureId === fileTreeHighlightedFeature
+        ? " highlighted"
+        : "";
+    const otherClass = isOther ? " other-segment" : "";
+    const featureName = isOther
+      ? "Other"
+      : getFeatureDisplayName(fw.featureId);
+    html +=
+      `<div class="filetree-bar-segment${highlightClass}${otherClass}" ` +
+      `style="width:${pct}%;background-color:${color};" ` +
+      `data-feature-id="${fw.featureId}" ` +
+      `data-feature-name="${featureName}" ` +
+      `data-pct="${pct}" ` +
+      `></div>`;
+  });
+  html += "</div>";
+  return html;
+}
+
+function getFeatureDisplayName(featureId) {
+  if (featureId === "__infrastructure__") return "Infrastructure";
+  if (featureId === "__other__") return "Other";
+  const feature = (DATA.features || []).find((f) => f.id === featureId);
+  return feature ? feature.name : featureId;
+}
+
+function getFeatureKind(featureId) {
+  if (featureId === "__infrastructure__") return "infrastructure";
+  const feature = (DATA.features || []).find((f) => f.id === featureId);
+  return feature ? feature.kind : "";
+}
+
+// -- File Tree: Sidebar rendering --
+function renderFileTreeSidebar(list) {
+  const fileTree = DATA.fileTree || [];
+  if (!fileTree.length) {
+    const empty = document.createElement("div");
+    empty.style.cssText =
+      "padding:16px;color:var(--text-dim);font-size:13px;";
+    empty.textContent =
+      "No file tree data. Re-run cartograph to generate.";
+    list.appendChild(empty);
+    return;
+  }
+
+  const tree = buildFileTreeStructure();
+  if (!tree) return;
+  aggregateDirWeights(tree);
+
+  // Filter matching paths if search is active
+  function matchesSearch(node, isFile) {
+    if (!searchQuery) return true;
+    const path = isFile ? node.path : node.path;
+    if (path.toLowerCase().includes(searchQuery)) return true;
+    if (isFile) return false;
+    // Check if any descendant matches
+    for (const child of Object.values(node.children)) {
+      if (matchesSearch(child, false)) return true;
+    }
+    for (const file of node.files) {
+      if (file.path.toLowerCase().includes(searchQuery)) return true;
+    }
+    return false;
+  }
+
+  function renderDirNode(node, depth) {
+    const children = Object.values(node.children).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    const files = [...node.files].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    const hasItems = children.length > 0 || files.length > 0;
+    const isExpanded = expandedFileTreeDirs[node.path];
+
+    if (!matchesSearch(node, false)) return;
+
+    // Render the directory item
+    const div = document.createElement("div");
+    div.className = `filetree-tree-item${selectedFileTreePath === node.path ? " active" : ""}${isFilePathHighlightedByHealth(node.path) ? " health-highlight" : ""}`;
+    div.style.setProperty("--depth", depth);
+
+    const barHtml = renderFeatureBar(node._aggregatedWeights);
+
+    div.innerHTML = `
+<div class="filetree-row">
+  <span class="tree-toggle ${hasItems ? (isExpanded ? "expanded" : "") : "leaf"}">&#9654;</span>
+  <span style="color:var(--text-muted);flex-shrink:0;">&#128193;</span>
+  <span class="sidebar-label">${node.name}/</span>
+  <span class="tree-file-count">${node._fileCount || 0}</span>
+</div>
+<div class="filetree-bar-container">${barHtml}</div>
+    `;
+
+    div.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (e.target.closest(".filetree-bar-segment")) {
+        const seg = e.target.closest(".filetree-bar-segment");
+        handleBarSegmentClick(seg.dataset.featureId);
+        return;
+      }
+      if (hasItems && e.target.closest(".tree-toggle")) {
+        expandedFileTreeDirs[node.path] =
+          !expandedFileTreeDirs[node.path];
+        renderSidebar();
+      } else {
+        selectedFileTreePath = node.path;
+        expandedFileTreeDirs[node.path] =
+          !expandedFileTreeDirs[node.path];
+        renderSidebar();
+      }
+    });
+
+    list.appendChild(div);
+
+    // If search is active, auto-expand matching ancestors
+    if (searchQuery && !isExpanded) {
+      // Check if any descendant matches — if so, force expand
+      let hasMatchingDescendant = false;
+      for (const child of children) {
+        if (matchesSearch(child, false)) {
+          hasMatchingDescendant = true;
+          break;
+        }
+      }
+      if (!hasMatchingDescendant) {
+        for (const file of files) {
+          if (file.path.toLowerCase().includes(searchQuery)) {
+            hasMatchingDescendant = true;
+            break;
+          }
+        }
+      }
+      if (hasMatchingDescendant) {
+        expandedFileTreeDirs[node.path] = true;
+        // Re-render children below
+        renderExpandedChildren(children, files, depth, list);
+        return;
+      }
+    }
+
+    if (isExpanded) {
+      renderExpandedChildren(children, files, depth, list);
+    }
+  }
+
+  function renderExpandedChildren(children, files, depth, list) {
+    children.forEach((child) => renderDirNode(child, depth + 1));
+    files.forEach((file) => renderFileNode(file, depth + 1, list));
+  }
+
+  function renderFileNode(file, depth, list) {
+    if (searchQuery && !file.path.toLowerCase().includes(searchQuery))
+      return;
+
+    const div = document.createElement("div");
+    div.className = `filetree-tree-item${selectedFileTreePath === file.path ? " active" : ""}${isFilePathHighlightedByHealth(file.path) ? " health-highlight" : ""}`;
+    div.style.setProperty("--depth", depth);
+
+    const barHtml = renderFeatureBar(file.featureWeights);
+
+    div.innerHTML = `
+<div class="filetree-row">
+  <span class="tree-toggle leaf">&#9654;</span>
+  <span style="color:var(--text-dim);flex-shrink:0;">&#128196;</span>
+  <span class="sidebar-label">${file.name}</span>
+</div>
+<div class="filetree-bar-container">${barHtml}</div>
+    `;
+
+    div.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (e.target.closest(".filetree-bar-segment")) {
+        const seg = e.target.closest(".filetree-bar-segment");
+        handleBarSegmentClick(seg.dataset.featureId);
+        return;
+      }
+      selectedFileTreePath = file.path;
+      renderSidebar();
+    });
+
+    list.appendChild(div);
+  }
+
+  // Render top-level children (skip the root node itself)
+  const topChildren = Object.values(tree.children).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const topFiles = [...tree.files].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+
+  topChildren.forEach((child) => renderDirNode(child, 0));
+  topFiles.forEach((file) => renderFileNode(file, 0, list));
+}
+
+// -- File Tree: Bar segment interactions --
+function handleBarSegmentClick(featureId) {
+  if (featureId === "__other__") return;
+  // Navigate to the Features tab and select this feature
+  const feature = (DATA.features || []).find((f) => f.id === featureId);
+  if (feature) {
+    switchTab("features");
+    setTimeout(() => selectFeature(featureId), 50);
+  }
+}
+
+// -- File Tree: Tooltip for bar segments --
+let fileTreeTooltipEl = null;
+
+function showFileTreeTooltip(e) {
+  if (currentTab !== "featuremap") return;
+  const seg = e.target.closest(".filetree-bar-segment");
+  if (!seg) {
+    hideFileTreeTooltip();
+    return;
+  }
+
+  const name = seg.dataset.featureName;
+  const pct = seg.dataset.pct;
+  const featureId = seg.dataset.featureId;
+  const color =
+    featureId === "__other__"
+      ? FILE_TREE_OTHER_COLOR
+      : fileTreeColorMap[featureId] || FILE_TREE_INFRA_COLOR;
+  const kind = getFeatureKind(featureId);
+
+  if (!fileTreeTooltipEl) {
+    fileTreeTooltipEl = document.createElement("div");
+    fileTreeTooltipEl.className = "filetree-tooltip";
+    document.body.appendChild(fileTreeTooltipEl);
+  }
+
+  fileTreeTooltipEl.innerHTML = `<span class="filetree-tooltip-color" style="background:${color};"></span>${name} <strong>${pct}%</strong>${kind ? ` <span style="color:var(--text-dim);font-size:11px;">(${kind})</span>` : ""}`;
+  fileTreeTooltipEl.style.display = "block";
+  fileTreeTooltipEl.style.left = e.clientX + 12 + "px";
+  fileTreeTooltipEl.style.top = e.clientY - 8 + "px";
+}
+
+function hideFileTreeTooltip() {
+  if (fileTreeTooltipEl) {
+    fileTreeTooltipEl.style.display = "none";
+  }
+}
+
+function moveFileTreeTooltip(e) {
+  if (fileTreeTooltipEl && fileTreeTooltipEl.style.display !== "none") {
+    fileTreeTooltipEl.style.left = e.clientX + 12 + "px";
+    fileTreeTooltipEl.style.top = e.clientY - 8 + "px";
+  }
+}
+
+// -- File Tree: Content panel (legend) --
+function renderFileTreeContent() {
+  const content = document.getElementById("filetree-content");
+  const fileTree = DATA.fileTree || [];
+
+  if (!fileTree.length) {
+    content.innerHTML =
+      '<div class="filetree-empty-state">No file tree data. Re-run cartograph to generate.</div>';
+    return;
+  }
+
+  // Collect all features that appear in the file tree
+  const featureWeightTotals = {};
+  fileTree.forEach((entry) => {
+    (entry.featureWeights || []).forEach((fw) => {
+      featureWeightTotals[fw.featureId] =
+        (featureWeightTotals[fw.featureId] || 0) + fw.weight;
+    });
+  });
+
+  // Sort: infrastructure last, then by total weight descending
+  const sortedFeatures = Object.keys(featureWeightTotals).sort((a, b) => {
+    if (a === "__infrastructure__") return 1;
+    if (b === "__infrastructure__") return -1;
+    return featureWeightTotals[b] - featureWeightTotals[a];
+  });
+
+  const legendItemsHtml = sortedFeatures
+    .map((fid) => {
+      const color = fileTreeColorMap[fid] || FILE_TREE_INFRA_COLOR;
+      const name = getFeatureDisplayName(fid);
+      const kind = getFeatureKind(fid);
+      const highlighted =
+        fileTreeHighlightedFeature === fid ? " highlighted" : "";
+      return `
+<div class="filetree-legend-item${highlighted}" data-feature-id="${fid}" onclick="toggleFileTreeHighlight('${fid}')">
+  <span class="filetree-legend-swatch" style="background:${color};"></span>
+  <span class="filetree-legend-name">${name}</span>
+  ${kind ? `<span class="filetree-legend-kind">${kind}</span>` : ""}
+</div>
+    `;
+    })
+    .join("");
+
+  content.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+<div style="font-size:18px;font-weight:700;">Feature Map Legend</div>
+<button class="filetree-copy-btn" onclick="copyFileTreeContext()">Copy as LLM context</button>
+    </div>
+    ${renderEngHealthFocusNotice("featuremap")}
+    <div class="detail-desc" style="margin-bottom:20px;">
+The sidebar shows the project file structure with colored feature-composition bars. Each bar segment represents how much of that file or folder is attributable to a feature.
+    </div>
+    <div class="filetree-legend-header">
+<div class="filetree-legend-title">Features (${sortedFeatures.length})</div>
+<span class="filetree-legend-toggle" onclick="toggleFileTreeLegend()">${fileTreeLegendCollapsed ? "Show" : "Hide"}</span>
+    </div>
+    <div class="filetree-legend-list" id="filetree-legend-list" style="${fileTreeLegendCollapsed ? "display:none;" : ""}">
+${legendItemsHtml}
+    </div>
+  `;
+
+  // Attach tooltip event listeners to the sidebar
+  setupFileTreeTooltips();
+}
+
+let fileTreeTooltipsAttached = false;
+function setupFileTreeTooltips() {
+  if (fileTreeTooltipsAttached) return;
+  const sidebarList = document.getElementById("sidebar-list");
+  if (!sidebarList) return;
+  fileTreeTooltipsAttached = true;
+
+  sidebarList.addEventListener("mouseover", showFileTreeTooltip);
+  sidebarList.addEventListener("mouseout", hideFileTreeTooltip);
+  sidebarList.addEventListener("mousemove", moveFileTreeTooltip);
+}
+
+function toggleFileTreeHighlight(featureId) {
+  if (fileTreeHighlightedFeature === featureId) {
+    fileTreeHighlightedFeature = null;
+  } else {
+    fileTreeHighlightedFeature = featureId;
+  }
+  renderSidebar();
+  renderFileTreeContent();
+}
+
+function toggleFileTreeLegend() {
+  fileTreeLegendCollapsed = !fileTreeLegendCollapsed;
+  const legendList = document.getElementById("filetree-legend-list");
+  if (legendList) {
+    legendList.style.display = fileTreeLegendCollapsed ? "none" : "";
+  }
+  const toggle = document.querySelector(".filetree-legend-toggle");
+  if (toggle) {
+    toggle.textContent = fileTreeLegendCollapsed ? "Show" : "Hide";
+  }
+}
+
+// -- File Tree: Copy as LLM context --
+function buildFileTreeLLMContext() {
+  const fileTree = DATA.fileTree || [];
+  if (!fileTree.length) return "";
+
+  const tree = buildFileTreeStructure();
+  if (!tree) return "";
+  aggregateDirWeights(tree);
+
+  let ctx = `## Feature Map\n\n> Generated by the **Cartograph** skill (\`.agents/skills/cartograph/\`).\n\n`;
+
+  // Group files by top-level directory
+  function renderDir(node, prefix) {
+    const children = Object.values(node.children).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    const files = [...node.files].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+
+    if (node.name) {
+      ctx += `\n### ${prefix}${node.name}/\n`;
+    }
+
+    files.forEach((f) => {
+      const weights = getTopWeights(f.featureWeights, 5);
+      const breakdown = weights
+        .map((w) => {
+          const name = getFeatureDisplayName(w.featureId);
+          return `${name} ${Math.round(w.weight * 100)}%`;
+        })
+        .join(", ");
+      const relativeName = node.name ? f.name : f.path;
+      ctx += `- \`${relativeName}\` — ${breakdown}\n`;
+    });
+
+    children.forEach((child) =>
+      renderDir(child, prefix + (node.name ? node.name + "/" : "")),
+    );
+  }
+
+  renderDir(tree, "");
+  return ctx;
+}
+
+function copyFileTreeContext() {
+  const ctx = buildFileTreeLLMContext();
+  navigator.clipboard.writeText(ctx).then(() => {
+    const btn = document.querySelector(".filetree-copy-btn");
+    if (btn) {
+      btn.textContent = "Copied!";
+      setTimeout(() => {
+        btn.textContent = "Copy as LLM context";
+      }, 2000);
+    }
+  });
+}
+
+
+Object.assign(window, {
+  closeDetail,
+  copyCompartmentLLMContext,
+  copyEntityLLMContext,
+  copyFeatureLLMContext,
+  copyFileMapPrompt,
+  copyFileTreeContext,
+  copyFlowLLMContext,
+  copyInvariantPrompt,
+  copySurfaceLLMContext,
+  navigateToFindingInTab,
+  openCodeHealthMetric,
+  renderCompartmentDetail,
+  selectCompartment,
+  selectEngHealthMetric,
+  selectEntity,
+  selectFeature,
+  selectFlow,
+  selectSurface,
+  showCodemapGraph,
+  switchTab,
+  toggleFileTreeHighlight,
+  toggleFileTreeLegend,
+  toggleInvariantExpand,
+});
+
+Object.defineProperty(window, "codemapView", {
+  get() {
+    return codemapView;
+  },
+  set(value) {
+    codemapView = value;
+  },
+});
+
+// -- File Loading and source-served runtime shell --
+let sourceMode = "server";
+let lastServerError = "";
+let sessionsState = { status: "loading", sessions: [] };
+let selectedSessionSlug = "mapping";
+const mappingSession = { name: "Mapping", slug: "mapping" };
+
+function setDropZoneError(message) {
+  const err = document.getElementById("drop-zone-error");
+  if (!err) return;
+  err.textContent = message || "";
+  err.style.display = message ? "block" : "none";
+}
+
+function normalizeData(data) {
+  if (!data || typeof data !== "object") throw new Error("Expected a JSON object");
+  DATA = data;
+  if (!DATA.meta) DATA.meta = { name: "Cartograph" };
+  if (!Array.isArray(DATA.surfaces)) DATA.surfaces = [];
+  if (!Array.isArray(DATA.features)) DATA.features = [];
+  if (!Array.isArray(DATA.entities)) DATA.entities = [];
+  if (!Array.isArray(DATA.relationships)) DATA.relationships = [];
+  if (!Array.isArray(DATA.operations)) DATA.operations = [];
+  if (!Array.isArray(DATA.flows)) DATA.flows = [];
+  if (!Array.isArray(DATA.compartments)) DATA.compartments = [];
+  if (!Array.isArray(DATA.fileTree)) DATA.fileTree = [];
+  if (!Array.isArray(DATA.techStack)) DATA.techStack = [];
+  DATA.fileTree = DATA.fileTree.map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const file = typeof entry.file === "string" ? entry.file : entry.path;
+    return file ? { ...entry, file, path: entry.path || file } : entry;
+  });
+}
+
+function loadData(json, options = {}) {
+  try {
+    normalizeData(typeof json === "string" ? JSON.parse(json) : json);
+    setDropZoneError("");
+    document.body.classList.add("has-data");
+    if (options.source) document.body.dataset.source = options.source;
+    init();
+  } catch (e) {
+    setDropZoneError("Invalid JSON: " + e.message);
+  }
+}
+
+async function loadServerData(options = {}) {
+  sourceMode = "server";
+  if (options.forceWelcome) document.body.classList.remove("has-data");
+  setDropZoneError(options.showLoading ? "Loading .cartograph/mapping.json from the local server..." : "");
+
+  try {
+    const response = await fetch("/api/cartograph");
+    const body = await response.json().catch(() => null);
+    if (sourceMode !== "server") return;
+
+    if (!response.ok) {
+      const message = body && typeof body.error === "string"
+        ? body.error
+        : "Request failed with " + response.status;
+      lastServerError = message;
+      document.body.classList.remove("has-data");
+      setDropZoneError(message);
+      return;
+    }
+
+    lastServerError = "";
+    loadData(body, { source: "server" });
+  } catch (error) {
+    if (sourceMode !== "server") return;
+    lastServerError = error instanceof Error ? error.message : String(error);
+    document.body.classList.remove("has-data");
+    setDropZoneError(lastServerError);
+  }
+}
+
+function handleFile(file) {
+  if (!file) return;
+  sourceMode = "file";
+  const reader = new FileReader();
+  reader.onload = (e) => loadData(e.target.result, { source: file.name });
+  reader.readAsText(file);
+}
+
+function showWelcome() {
+  document.body.classList.remove("has-data");
+  setDropZoneError(lastServerError);
+}
+
+function setupPreviewTabs() {
+  document
+    .querySelector(".preview-tab-bar")
+    ?.addEventListener("click", function (e) {
+      var pill = e.target.closest(".preview-pill");
+      if (!pill || !pill.dataset.previewTab) return;
+      document
+        .querySelectorAll(".preview-pill")
+        .forEach(function (p) {
+          p.classList.remove("active");
+        });
+      pill.classList.add("active");
+      document
+        .querySelectorAll(".preview-pane")
+        .forEach(function (p) {
+          p.classList.remove("active");
+        });
+      var pane = document.querySelector(
+        '[data-preview-card="' + pill.dataset.previewTab + '"]',
+      );
+      if (pane) pane.classList.add("active");
+    });
+          
+}
+
+function setupFileLoading() {
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+  const browseBtn = document.getElementById("browse-btn");
+  const changeJsonBtn = document.getElementById("change-json-btn");
+  const showWelcomeBtn = document.getElementById("show-welcome-btn");
+  const reloadServerBtn = document.getElementById("reload-server-btn");
+  const loadServerBtn = document.getElementById("load-server-btn");
+
+  function openFilePicker() {
+    fileInput.value = "";
+    fileInput.click();
+  }
+
+  browseBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openFilePicker();
+  });
+  changeJsonBtn.addEventListener("click", openFilePicker);
+  showWelcomeBtn.addEventListener("click", showWelcome);
+  reloadServerBtn.addEventListener("click", () => loadServerData({ showLoading: true }));
+  loadServerBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    loadServerData({ showLoading: true });
+  });
+  fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
+  dropZone.addEventListener("click", openFilePicker);
+  dropZone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openFilePicker();
+    }
+  });
+
+  dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    handleFile(e.dataTransfer.files[0]);
+  });
+
+  document.body.addEventListener("dragover", (e) => e.preventDefault());
+  document.body.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (selectedSessionSlug === mappingSession.slug && e.dataTransfer.files.length) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+function normalizeSessions(value) {
+  return Array.isArray(value)
+    ? value.filter((session) => session && typeof session.name === "string" && typeof session.slug === "string")
+    : [];
+}
+
+async function loadSessions() {
+  try {
+    const response = await fetch("/api/sessions");
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !body || typeof body !== "object") {
+      throw new Error((body && body.error) || "Request failed with " + response.status);
+    }
+    sessionsState = { status: "ready", sessions: normalizeSessions(body.sessions) };
+  } catch (error) {
+    sessionsState = {
+      status: "error",
+      sessions: [],
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  renderSessions();
+}
+
+function renderSessions() {
+  const list = document.getElementById("sessions-list");
+  const error = document.getElementById("sessions-error");
+  const sessions = [mappingSession, ...sessionsState.sessions];
+  list.innerHTML = "";
+  sessions.forEach((session) => {
+    const button = document.createElement("button");
+    button.className = "session-item" + (session.slug === selectedSessionSlug ? " active" : "");
+    button.type = "button";
+    button.innerHTML = '<span class="session-name"></span>';
+    button.querySelector(".session-name").textContent = session.name;
+    button.addEventListener("click", () => selectSession(session));
+    list.appendChild(button);
+  });
+
+  if (sessionsState.status === "error" && sessionsState.message) {
+    error.hidden = false;
+    error.textContent = sessionsState.message;
+  } else {
+    error.hidden = true;
+    error.textContent = "";
+  }
+}
+
+function selectSession(session) {
+  selectedSessionSlug = session.slug;
+  const visualizer = document.getElementById("visualizer-root");
+  const empty = document.getElementById("session-empty-panel");
+  const title = document.getElementById("session-empty-title");
+
+  if (session.slug === mappingSession.slug) {
+    visualizer.dataset.hidden = "false";
+    empty.hidden = true;
+  } else {
+    visualizer.dataset.hidden = "true";
+    empty.hidden = false;
+    title.textContent = session.name;
+  }
+  renderSessions();
+}
+
+async function createSession() {
+  const button = document.getElementById("session-create-btn");
+  button.disabled = true;
+  try {
+    const response = await fetch("/api/sessions", { method: "POST" });
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !body || typeof body !== "object" || !body.state) {
+      throw new Error((body && body.error) || "Request failed with " + response.status);
+    }
+    sessionsState = { status: "ready", sessions: normalizeSessions(body.state.sessions) };
+    if (body.session && body.session.slug) {
+      selectedSessionSlug = body.session.slug;
+      selectSession(body.session);
+    } else {
+      renderSessions();
+    }
+  } catch (error) {
+    sessionsState = {
+      ...sessionsState,
+      status: "error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+    renderSessions();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function setupServerEvents() {
+  const events = new EventSource("/api/cartograph/stream");
+  events.addEventListener("cartograph-changed", () => {
+    if (sourceMode === "server") loadServerData();
+  });
+}
+
+function setupRuntimeShell() {
+  document.getElementById("session-create-btn").addEventListener("click", createSession);
+  setupPreviewTabs();
+  setupFileLoading();
+  renderSessions();
+  loadSessions();
+  setupServerEvents();
+  loadServerData();
+}
+
+setupRuntimeShell();
