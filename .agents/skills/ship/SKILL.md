@@ -269,6 +269,7 @@ For **each PR** (bottom-up), run this loop until either the PR is clean — CI c
 3. **Extract review findings and clean-bills.**
    - **Findings** — for Codex, comments authored by `chatgpt-codex-connector` / `codex` or matching its summary format.
    - **Clean bill of health** — some review agents react with a 👍 (`+1`) on the PR description when they find no issues. For Codex, a `+1` reaction on the PR body authored by the review agent means "no findings on this PR." Treat this as the clean signal for the PR.
+   - **Review ledger** — keep a running list of every distinct finding across all rounds and PRs. Each entry should capture the PR, source link, a short plain-English explanation of the issue, the Fix/Skip decision, and the final outcome: fixed with the commit/approach used, skipped with the reason, or held for the user's call. This ledger is what makes the final review-complete report useful instead of a vague "review is clean" status.
 4. **Triage each finding** into one of:
    - **Fix** — real bug, correctness issue, security issue, or other clear defect that is realistic for this product at its end state.
    - **Skip** — nit, style-only, false positive (the reviewer misread the code), already handled, overly-defensive (adds complexity for scenarios that won't realistically occur — redundant null checks on framework-guaranteed values, error handling for impossible states, excessive validation on internal-only paths), **or unrealistic for this product**.
@@ -288,7 +289,7 @@ For **each PR** (bottom-up), run this loop until either the PR is clean — CI c
 5. **Triage autonomously and report — but stop and ask whenever you're not sure.** For findings you have a confident position on, decide Fix vs. Skip yourself and act on them (point 6) without waiting. But if the realism check left you genuinely unsure — most often a backward-compat finding where you can't confirm whether existing usage must be preserved — **don't pick a side to keep the loop moving.** Break the loop: pause and ask the user about those specific findings before acting on them; the rest of the round proceeds in parallel. Verifying costs a message; guessing wrong costs a bad fix or a shipped regression. Post a status message either way so the user can interject. Format:
    - **Context header** at the very top: ticket id + title, a one-line summary of what this stack is shipping, and a compact list of the PRs (slug + URL). The user shouldn't need to open anything to recall the scope.
    - **Per-PR review status**: for each PR, one of `clean` (review agent reacted 👍 on the PR body), `findings: N` (with N findings to address this round), `awaiting review`, or `re-review pending` (after a retrigger). Note CI state here too (e.g. `checks: 2 failing`) so a red PR is visible alongside its review state.
-   - **Findings this round** with the agent's autonomous Fix/Skip decision + one-line reason + source link. New-this-round and carried-over both shown for clarity. Skip findings appear once and are not carried forward.
+   - **Findings this round** with the agent's autonomous Fix/Skip decision + one-line reason + source link. New-this-round and carried-over both shown for clarity. Skip findings appear once and are not carried forward. Add or update the matching review-ledger entry while reporting the round so the final summary is complete without reconstructing history from memory.
    - **Next action**: "fixing the N valid findings, recording N skips on the PR, and retriggering review" (or "no fixes — recording N skips on the PR and retriggering review", or "no actionable findings and no skips — waiting for next watcher tick"). If any findings are held for the user, say so explicitly here — e.g. "holding M findings for your call on whether existing usage must be preserved; acting on the rest" — and make clear those M are blocked pending the user's answer.
 
    For the findings you're confident about, don't wait — proceed straight to point 6. For any finding you flagged as uncertain above, hold it and wait for the user's answer before acting on it; the loop continues for the rest. The user can also short-circuit the whole loop at any time via a chat merge signal or a GitHub `APPROVED` review (see Step 7).
@@ -308,6 +309,7 @@ For **each PR** (bottom-up), run this loop until either the PR is clean — CI c
           -f body="Fixed in <sha>: <one-line description>"
         ```
         (For top-level issue comments rather than diff-line comments, post a follow-up issue comment quoting the finding instead.)
+   - Update the review ledger entry with the fix commit and the brief "how it was fixed" explanation you posted.
 
    **For each Skip finding** (including the "unrealistic for this product" bucket from point 4):
    - Reply to the finding comment with a short rationale so the reviewer's thread shows it was considered, not ignored:
@@ -324,6 +326,7 @@ For **each PR** (bottom-up), run this loop until either the PR is clean — CI c
      gh api -X PATCH repos/{owner}/{repo}/pulls/<num> -F body=@<file>   # add -f title="..." to also change the title
      ```
      The section serves as durable context for the review agent on the next pass.
+   - Update the review ledger entry with the skip rationale you posted.
 
 7. **Retrigger the review.** Always retrigger after acting on a round, **including rounds where every finding was skipped** — the explicit skip rationales (in replies and in the PR description) need another pass so the reviewer can either drop those points or push back with new arguments. The only round that does not retrigger is one where there were zero findings to act on in the first place. For Codex:
    ```bash
@@ -334,7 +337,9 @@ If a finding spans multiple PRs, fix on the lowest PR that owns the code so chil
 
 ### 6e. Review complete — generate the final brief
 
-Once every watched PR is review-complete and the watcher has been torn down (see the watcher lifecycle above), and the user has not already given a merge signal, invoke the `brief` skill if it's installed. With real PRs in place and review complete, it auto-detects FINAL mode and produces a visual HTML one-pager from the final history, the cumulative diff, the PR stack, and the review threads. Give the user the brief's path, then wait at the Step 7 merge gate. If the user already gave a merge signal, skip straight to Step 7. If `brief` isn't installed, skip this step.
+Once every watched PR is review-complete and the watcher has been torn down (see the watcher lifecycle above), first report the review outcome from the ledger before moving on. List every finding raised across the whole review, grouped by PR. For each one, briefly explain what the reviewer was worried about, then state whether it was **fixed** (including how, and the commit if available) or **skipped** (including why). If there were no findings at all, say that explicitly. This is the user's end-of-review audit trail; don't make them infer it from PR comments.
+
+After that, if the user has not already given a merge signal, invoke the `brief` skill if it's installed. With real PRs in place and review complete, it auto-detects FINAL mode and produces a visual HTML one-pager from the final history, the cumulative diff, the PR stack, and the review threads. Give the user the brief's path, then wait at the Step 7 merge gate. If the user already gave a merge signal, skip straight to Step 7. If `brief` isn't installed, skip this step.
 
 ## Step 7 — Merge (gate)
 
@@ -370,7 +375,7 @@ When approved:
 
 ## Step 8 — Report
 
-Short summary: ticket id, merged PR URLs, review findings skipped + reasons.
+Short summary: ticket id, merged PR URLs, and the review ledger: every finding with its brief explanation and whether it was fixed (how) or skipped (why).
 
 ---
 
