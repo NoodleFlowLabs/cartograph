@@ -311,22 +311,28 @@ For **each PR** (bottom-up), run this loop until either the PR is clean — CI c
         (For top-level issue comments rather than diff-line comments, post a follow-up issue comment quoting the finding instead.)
    - Update the review ledger entry with the fix commit and the brief "how it was fixed" explanation you posted.
 
-   **For each Skip finding** (including the "unrealistic for this product" bucket from point 4):
-   - Reply to the finding comment with a short rationale so the reviewer's thread shows it was considered, not ignored:
-     ```bash
-     gh api repos/{owner}/{repo}/pulls/<num>/comments/<finding-comment-id>/replies \
-       -f body="Skipping: <one-line reason — e.g. 'this code path only runs from a single operator console; concurrency hardening isn't realistic for this product'>"
-     ```
-   - **Update the PR description** to record the explicit skip so future review rounds don't resurface it. Maintain a `## Explicit skips` section at the bottom of the PR body and append a bullet for each skip: `<one-line finding summary> — <reason>` with a link to the finding comment. Edit the PR body via:
-     ```bash
-     gh pr edit <num> --body "$(updated body)"
-     ```
-     If `gh pr edit` fails with a GitHub _"Projects (classic) is being deprecated"_ GraphQL error, don't treat it as a dead end — `gh pr edit` resolves classic-project fields and errors out account-wide once classic projects are sunset, so retrying it won't help. Edit the body (and title) via the REST API instead, which avoids that path:
-     ```bash
-     gh api -X PATCH repos/{owner}/{repo}/pulls/<num> -F body=@<file>   # add -f title="..." to also change the title
-     ```
-     The section serves as durable context for the review agent on the next pass.
-   - Update the review ledger entry with the skip rationale you posted.
+   **For each Skip finding** (including the "unrealistic for this product" bucket from point 4) — **skipping is never silent.** Every finding you intentionally don't fix gets *both* durable records below before the review is retriggered, so the next round sees a deliberate decision rather than an oversight and doesn't re-raise the same point. A reply without the description entry lets the next round resurface it; a description entry without a reply leaves the reviewer's thread looking ignored. Do both, for every skip:
+
+   1. **Reply on the finding's own comment thread** with a short rationale, so the thread shows it was considered, not ignored. For a **diff-line** comment, reply to it directly:
+      ```bash
+      gh api repos/{owner}/{repo}/pulls/<num>/comments/<finding-comment-id>/replies \
+        -f body="Skipping: <one-line reason — e.g. 'this code path only runs from a single operator console; concurrency hardening isn't realistic for this product'>"
+      ```
+      For a **top-level issue comment** rather than a diff-line comment (Codex often posts its summary this way), post a follow-up issue comment that quotes the finding and gives the same rationale:
+      ```bash
+      gh pr comment <num> --body "Re: <quoted finding> — skipping: <one-line reason>"
+      ```
+
+   2. **Record the skip in the PR description** so the next review round doesn't resurface it. Maintain a `## Explicit skips` section at the bottom of the PR body and append a bullet for each skip: `<one-line finding summary> — <reason>`, with a link to the finding comment. Write the reason as durable context aimed at the **review agent**: enough that on its next pass it can either drop the point or push back with a new argument, instead of re-flagging it cold. Edit the PR body via:
+      ```bash
+      gh pr edit <num> --body "$(updated body)"
+      ```
+      If `gh pr edit` fails with a GitHub _"Projects (classic) is being deprecated"_ GraphQL error, don't treat it as a dead end — `gh pr edit` resolves classic-project fields and errors out account-wide once classic projects are sunset, so retrying it won't help. Edit the body (and title) via the REST API instead, which avoids that path:
+      ```bash
+      gh api -X PATCH repos/{owner}/{repo}/pulls/<num> -F body=@<file>   # add -f title="..." to also change the title
+      ```
+
+   3. **Update the review ledger** entry with the skip rationale you posted, so the final report (Step 6e / Step 8) carries it.
 
 7. **Retrigger the review.** Always retrigger after acting on a round, **including rounds where every finding was skipped** — the explicit skip rationales (in replies and in the PR description) need another pass so the reviewer can either drop those points or push back with new arguments. The only round that does not retrigger is one where there were zero findings to act on in the first place. For Codex:
    ```bash
@@ -389,6 +395,7 @@ Short summary: ticket id, merged PR URLs, and the review ledger: every finding w
 - No `--no-verify` unless the user asks.
 - **Never create PRs in draft mode.** Every PR is opened ready for review — no `--draft` / Graphite draft flag — in both entry modes (see Step 6).
 - Review-finding fixes always land as separate commits on the PR branch — a new commit and `gt submit`, **never `gt modify`**/amend/squash unless the user explicitly asks. (`gt modify` is the `graphite` skill's default for shaping an unsubmitted stack; it doesn't apply once the stack is in review.)
+- **No silent skips.** Every review finding you intentionally don't fix gets two durable records before the next review is retriggered: a reply on its comment thread with the rationale, and an entry in the PR description's `## Explicit skips` section. The reply keeps the reviewer's thread from looking ignored; the description entry is what stops the next round from re-flagging the same issue (see Step 6, point 6).
 - If the plan turns out wrong mid-implementation, stop and re-confirm with the user.
 - If Linear MCP is unreachable mid-flow, surface the would-be status change in chat and ask the user to update Linear.
 - PR titles use conventional commits (`feat(scope): …`). PR bodies include `Closes <LINEAR-ID>` so Linear auto-closes on merge.
