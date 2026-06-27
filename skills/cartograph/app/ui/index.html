@@ -5,25 +5,411 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cartograph</title>
-    <link rel="stylesheet" href="/styles/base.css" />
-    <link rel="stylesheet" href="/styles/layout.css" />
-    <link rel="stylesheet" href="/styles/navigation.css" />
-    <link rel="stylesheet" href="/styles/content.css" />
-    <link rel="stylesheet" href="/styles/views.css" />
-    <link rel="stylesheet" href="/styles/welcome.css" />
-    <link rel="stylesheet" href="/styles/responsive.css" />
-    <script type="importmap">
-      {
-        "imports": {
-          "htm": "/vendor/htm.module.js",
-          "preact": "/vendor/preact.module.js",
-          "preact/hooks": "/vendor/preact-hooks.module.js"
-        }
-      }
-    </script>
+    <link rel="stylesheet" href="/styles/visualizer.css" />
   </head>
   <body>
-    <div id="root"></div>
+    <div class="runtime-frame">
+      <aside class="sessions-rail" aria-label="Cartograph sessions">
+        <div class="sessions-rail-top">
+          <div class="sessions-rail-title">Sessions</div>
+          <button class="session-create-btn" id="session-create-btn" type="button" aria-label="Create session">+</button>
+        </div>
+        <div class="sessions-list" id="sessions-list"></div>
+        <div class="sessions-error" id="sessions-error" hidden></div>
+      </aside>
+      <div class="session-content">
+        <div class="visualizer-root" id="visualizer-root">
+              <div class="app-shell" id="app-shell">
+                <div class="header">
+                  <div class="header-left">
+                    <div
+                      class="logo"
+                      style="display: flex; align-items: center; gap: 8px"
+                    >
+                      <img
+                        src="/cartograph-logo.svg"
+                        width="22"
+                        height="22"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      Cartograph
+                    </div>
+                  </div>
+                  <div class="stats" id="stats"></div>
+                  <div class="header-actions">
+                    <button class="secondary-btn" id="show-welcome-btn" type="button">Welcome</button>
+                    <button class="secondary-btn" id="reload-server-btn" type="button">Reload server</button>
+                    <button class="secondary-btn" id="change-json-btn" type="button">Change JSON</button>
+                  </div>
+                </div>
+          
+                <div class="tabs">
+                  <div class="tab-cluster tab-cluster-standalone" data-group="overview">
+                    <div class="tab-cluster-items">
+                      <div class="tab active" data-tab="overview">Overview</div>
+                    </div>
+                  </div>
+                  <div class="tab-cluster" data-group="pm">
+                    <span class="tab-group-label" aria-hidden="true">PM</span>
+                    <div class="tab-cluster-items">
+                      <div class="tab" data-tab="surfaces">Surfaces</div>
+                      <div class="tab" data-tab="features">Features</div>
+                      <div class="tab" data-tab="flows">Flows</div>
+                      <div
+                        class="tab"
+                        data-tab="invariants"
+                        id="invariants-tab"
+                        style="display: none"
+                      >
+                        Invariants<span id="invariants-tab-badge"></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="tab-cluster" data-group="eng">
+                    <span class="tab-group-label" aria-hidden="true">Eng</span>
+                    <div class="tab-cluster-items">
+                      <div class="tab" data-tab="techstack">Tech Stack</div>
+                      <div class="tab" data-tab="featuremap">Feature Map</div>
+                      <div class="tab" data-tab="datamodel">Data Model</div>
+                      <div class="tab" data-tab="codeorg">Code Organization</div>
+                      <div class="tab" data-tab="codehealth">Code Health</div>
+                    </div>
+                  </div>
+                </div>
+          
+                <div class="main">
+                  <div class="sidebar">
+                    <div class="sidebar-search">
+                      <input type="text" id="search" placeholder="Search..." />
+                    </div>
+                    <div class="sidebar-list" id="sidebar-list"></div>
+                  </div>
+          
+                  <div class="content" id="content">
+                    <div class="panel-host" id="panel-host">
+                      <!-- Overview -->
+                      <div
+                        class="panel active"
+                        id="overview-panel"
+                        style="flex-direction: row"
+                      >
+                        <div class="overview-content" id="overview-content"></div>
+                      </div>
+          
+                      <!-- Surfaces -->
+                      <div class="panel" id="surfaces-panel" style="flex-direction: row">
+                        <div class="surface-content" id="surface-content">
+                          <div class="empty-state">Select a surface from the sidebar</div>
+                        </div>
+                      </div>
+          
+                      <!-- Features -->
+                      <div class="panel" id="features-panel" style="flex-direction: row">
+                        <div class="feature-content" id="feature-content">
+                          <div class="empty-state">Select a feature from the sidebar</div>
+                        </div>
+                      </div>
+          
+                      <!-- Data Model -->
+                      <div class="panel" id="entities-panel" style="flex-direction: row">
+                        <div
+                          id="entity-map-panel"
+                          style="flex: 1; display: flex; flex-direction: column"
+                        >
+                          <div id="entity-map-canvas"></div>
+                        </div>
+                        <div class="detail-panel" id="entity-detail"></div>
+                      </div>
+          
+                      <!-- Flows -->
+                      <div class="panel" id="flows-panel" style="flex-direction: row">
+                        <div class="flow-content" id="flow-content">
+                          <div class="empty-state">Select a flow from the sidebar</div>
+                        </div>
+                      </div>
+          
+                      <!-- Invariants -->
+                      <div
+                        class="panel"
+                        id="invariants-panel"
+                        style="flex-direction: row"
+                      >
+                        <div class="invariants-content" id="invariants-content">
+                          <div class="empty-state">No invariant data</div>
+                        </div>
+                      </div>
+          
+                      <!-- Code Organization -->
+                      <div class="panel" id="codemap-panel" style="flex-direction: row">
+                        <div class="codemap-content" id="codemap-content">
+                          <div class="empty-state" id="codemap-empty">
+                            Select a compartment from the sidebar
+                          </div>
+                          <div id="codemap-detail-view" style="display: none"></div>
+                          <div
+                            id="codemap-graph-view"
+                            style="
+                              display: none;
+                              flex: 1;
+                              overflow: hidden;
+                              position: relative;
+                            "
+                          >
+                            <div
+                              id="codemap-graph-canvas"
+                              style="width: 100%; height: 100%; cursor: grab"
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+          
+                      <!-- Feature Map -->
+                      <div class="panel" id="filetree-panel" style="flex-direction: row">
+                        <div class="filetree-legend" id="filetree-content">
+                          <div class="filetree-empty-state">
+                            No file tree data. Re-run cartograph to generate.
+                          </div>
+                        </div>
+                      </div>
+          
+                      <!-- Tech Stack -->
+                      <div class="panel" id="techstack-panel" style="flex-direction: row">
+                        <div class="techstack-content" id="techstack-content">
+                          <div class="techstack-empty">
+                            No tech stack data. Re-run cartograph to generate.
+                          </div>
+                        </div>
+                      </div>
+          
+                      <!-- Code Health -->
+                      <div
+                        class="panel"
+                        id="codehealth-panel"
+                        style="flex-direction: row"
+                      >
+                        <div class="codehealth-panel-inner">
+                          <div class="codehealth-sidebar" id="codehealth-sidebar"></div>
+                          <div class="codehealth-content" id="codehealth-content"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          
+              <!-- Welcome screen (shown until data is loaded) -->
+              <div class="drop-zone-overlay" id="drop-zone-overlay">
+                <div class="welcome-shell">
+                  <!-- Logo -->
+                  <div class="welcome-logo">
+                    <img
+                      src="/cartograph-logo.svg"
+                      width="28"
+                      height="28"
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    <span class="welcome-logo-text">Cartograph</span>
+                  </div>
+          
+                  <!-- Dashboard Preview -->
+                  <div class="preview-dashboard">
+                    <div class="preview-mock-banner">
+                      Sample dashboard &mdash; load local mapping data below
+                    </div>
+                    <div class="preview-tab-bar">
+                      <span class="preview-pill active" data-preview-tab="overview">Overview</span>
+                      <span class="preview-group-sep"></span>
+                      <span class="preview-group-label pm">PM</span>
+                      <span class="preview-pill" data-preview-tab="surfaces">Surfaces</span>
+                      <span class="preview-pill" data-preview-tab="features">Features</span>
+                      <span class="preview-pill" data-preview-tab="flows">Flows</span>
+                      <span class="preview-pill" data-preview-tab="invariants">Invariants</span>
+                      <span class="preview-group-sep"></span>
+                      <span class="preview-group-label eng">Eng</span>
+                      <span class="preview-pill" data-preview-tab="techstack">Tech Stack</span>
+                      <span class="preview-pill" data-preview-tab="featuremap">Feature Map</span>
+                      <span class="preview-pill" data-preview-tab="datamodel">Data Model</span>
+                      <span class="preview-pill" data-preview-tab="codeorg">Code Org</span>
+                      <span class="preview-pill" data-preview-tab="codehealth">Code Health</span>
+                    </div>
+                    <div class="preview-content">
+                      <div class="preview-pane active" data-preview-card="overview">
+                        <div class="pv-stats">
+                          <div class="pv-stat"><div class="pv-stat-num">12</div><div class="pv-stat-label">Surfaces</div></div>
+                          <div class="pv-stat"><div class="pv-stat-num">47</div><div class="pv-stat-label">Features</div></div>
+                          <div class="pv-stat"><div class="pv-stat-num">28</div><div class="pv-stat-label">Entities</div></div>
+                          <div class="pv-stat"><div class="pv-stat-num">8</div><div class="pv-stat-label">Flows</div></div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="surfaces">
+                        <div class="pv-list">
+                          <div class="pv-row">Home Feed</div>
+                          <div class="pv-row">User Profile</div>
+                          <div class="pv-row">Checkout</div>
+                          <div class="pv-row">Notifications</div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="features">
+                        <div class="pv-list">
+                          <div class="pv-row">User Authentication</div>
+                          <div class="pv-row">Full-Text Search</div>
+                          <div class="pv-row">Payment Processing</div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="flows">
+                        <div class="pv-flow">
+                          <div class="pv-step">Signup</div>
+                          <span class="pv-arrow">&rarr;</span>
+                          <div class="pv-step">Verify</div>
+                          <span class="pv-arrow">&rarr;</span>
+                          <div class="pv-step">Onboard</div>
+                          <span class="pv-arrow">&rarr;</span>
+                          <div class="pv-step">Dashboard</div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="invariants">
+                        <div class="pv-checks">
+                          <div class="pv-check pass">&#10003; Credits refunded on failure</div>
+                          <div class="pv-check pass">&#10003; Free trial always 14 days</div>
+                          <div class="pv-check fail">&#10007; Deleted users lose access</div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="techstack">
+                        <div class="pv-pills">
+                          <div class="pv-pill">TypeScript</div>
+                          <div class="pv-pill">React</div>
+                          <div class="pv-pill">Node.js</div>
+                          <div class="pv-pill">PostgreSQL</div>
+                          <div class="pv-pill">Redis</div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="featuremap">
+                        <div class="pv-list" style="max-width:340px">
+                          <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/feed/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--pm-accent-dim);color:var(--pm-accent)">Home Feed</span></div>
+                          <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/profile/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--accent-dim);color:var(--accent)">User Profile</span></div>
+                          <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/checkout/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--green-dim);color:var(--green)">Checkout</span></div>
+                          <div class="pv-row" style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">src/notifications/</span><span style="font-size:11px;padding:2px 8px;border-radius:2px;background:var(--purple-dim);color:var(--purple)">Notifications</span></div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="datamodel">
+                        <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+                          <div class="pv-graph">
+                            <div class="pv-node" style="border-color:var(--accent);color:var(--accent)">User</div>
+                            <div class="pv-edge"></div>
+                            <div class="pv-node" style="border-color:var(--pm-accent);color:var(--pm-accent)">Order</div>
+                            <div class="pv-edge"></div>
+                            <div class="pv-node" style="border-color:var(--green);color:var(--green)">Product</div>
+                          </div>
+                          <div style="display:flex;gap:0;align-items:center">
+                            <div style="width:20px;height:2px;background:transparent"></div>
+                            <div style="width:2px;height:20px;background:var(--text-dim)"></div>
+                            <div style="width:20px;height:2px;background:transparent"></div>
+                          </div>
+                          <div class="pv-graph">
+                            <div class="pv-node" style="border-color:var(--purple);color:var(--purple)">Session</div>
+                            <div class="pv-edge"></div>
+                            <div class="pv-node" style="border-color:var(--orange);color:var(--orange)">Payment</div>
+                            <div class="pv-edge"></div>
+                            <div class="pv-node" style="border-color:var(--pink);color:var(--pink)">Review</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="codeorg">
+                        <div class="pv-modules">
+                          <div class="pv-module" style="border-color:rgba(91,141,239,0.3)">
+                            <div class="pv-module-name" style="color:var(--pm-accent)">Checkout</div>
+                            <div class="pv-module-boxes">
+                              <div class="pv-module-box" style="background:var(--pm-accent-dim);color:var(--pm-accent)">src/cart/</div>
+                              <div class="pv-module-box" style="background:var(--pm-accent-dim);color:var(--pm-accent)">PaymentForm.tsx</div>
+                              <div class="pv-module-box" style="background:var(--pm-accent-dim);color:var(--pm-accent)">receipt.ts</div>
+                            </div>
+                          </div>
+                          <div class="pv-module" style="border-color:rgba(200,167,80,0.3)">
+                            <div class="pv-module-name" style="color:var(--accent)">User Profile</div>
+                            <div class="pv-module-boxes">
+                              <div class="pv-module-box" style="background:var(--accent-dim);color:var(--accent)">src/profile/</div>
+                              <div class="pv-module-box" style="background:var(--accent-dim);color:var(--accent)">Avatar.tsx</div>
+                              <div class="pv-module-box" style="background:var(--accent-dim);color:var(--accent)">settings.ts</div>
+                            </div>
+                          </div>
+                          <div class="pv-module" style="border-color:rgba(78,173,122,0.3)">
+                            <div class="pv-module-name" style="color:var(--green)">Home Feed</div>
+                            <div class="pv-module-boxes">
+                              <div class="pv-module-box" style="background:var(--green-dim);color:var(--green)">src/feed/</div>
+                              <div class="pv-module-box" style="background:var(--green-dim);color:var(--green)">Timeline.tsx</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="preview-pane" data-preview-card="codehealth">
+                        <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px">
+                          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px 4px 0 0">
+                            <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span><span style="font-size:14px;color:var(--text)">Co-location</span></div>
+                            <span style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)">92%</span>
+                          </div>
+                          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border)">
+                            <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block"></span><span style="font-size:14px;color:var(--text)">DRYness</span></div>
+                            <span style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent)">74%</span>
+                          </div>
+                          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:0 0 4px 4px">
+                            <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block"></span><span style="font-size:14px;color:var(--text)">Dead Code</span></div>
+                            <span style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--red)">38%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+          
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:20px;width:100%">
+                    <div class="preview-cta">
+                      Load your local <code>.cartograph/mapping.json</code> to get your own dashboard like this.
+                    </div>
+          
+                    <div
+                      class="drop-zone"
+                      id="drop-zone"
+                      role="button"
+                      tabindex="0"
+                      aria-label="Load mapping.json"
+                    >
+                      <div class="drop-zone-title">
+                        Drop <code>mapping.json</code> here
+                      </div>
+                      <div class="drop-zone-sub">or browse for the generated file</div>
+                      <button class="drop-zone-btn" id="load-server-btn" type="button">Load local server file</button>
+                      <button class="drop-zone-btn" id="browse-btn" type="button">Browse files</button>
+                      <div class="drop-zone-error" id="drop-zone-error"></div>
+                      <input
+                        type="file"
+                        id="file-input"
+                        accept=".json,application/json"
+                        style="display: none"
+                      />
+                    </div>
+                  </div>
+          
+                  <div style="display:flex;flex-direction:column;align-items:center;gap:16px;width:100%">
+                    <div class="welcome-divider"></div>
+                    <div class="welcome-landing-link">
+                      <a
+                        href="https://cartograph.sh"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        >Learn more at cartograph.sh &rarr;</a
+                      >
+                    </div>
+                  </div>
+        </div>
+        <div class="session-empty-panel" id="session-empty-panel" hidden>
+          <div>
+            <h1 id="session-empty-title">Session</h1>
+            <p>This workspace session is ready for future Cartograph views.</p>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
