@@ -1,404 +1,95 @@
 ---
 name: ship
-description: Ships work end-to-end into a Graphite PR stack with review loops and a human-approved merge. Two modes — from a Linear ticket (selects or reads the named ticket, optionally plans, implements in a fresh worktree), or from changes already made locally ("ship these changes as a PR") where it skips ticket creation/selection and goes straight to PR creation. Use when the user asks to "ship", "implement", or "pick up" a ticket, or to "ship these changes / open a PR" for existing local work. Holds the human in the loop at every approval gate.
+description: Ship changes as a PR (or Graphite stack) with an interactive review loop. Entry can be anything - changes already sitting in the working tree, a Linear ticket to implement, or just a plain-text description of what to build. Implements if needed, split into a stack, then loops on review findings - always confirming with the user which findings to fix before fixing them. Stops when everything is green; merging is the user's call. Use when the user says "ship", "ship these changes", "ship FOO-123", "open a PR for this", or describes a change and wants it shipped.
 ---
 
 # Ship
 
-End-to-end Linear ticket → worktree → Graphite PR stack → review-agent loops → merge.
+Take something — existing changes, a ticket, or just a description — and get it onto a clean, reviewed PR stack. Stop when it's green. The user merges on their own time.
 
-This skill is paired with the `ticket` skill. Normally a Linear ticket already exists; this skill picks one up. If the user wants to ship something with no ticket yet, read the `ticket` skill and follow its workflow to create one before continuing.
+The whole skill runs on two habits: keep the user in the loop on judgment calls (which review findings to fix, how to split complex work), and handle the mechanical parts yourself.
 
-## Two entry modes
+## What's being shipped
 
-How the skill was invoked determines whether a ticket is involved at all:
+The invocation tells you. Three flavors:
 
-- **Ticket mode (default).** The user names or asks you to pick up a Linear ticket ("ship FOO-123", "ship the feed-pagination ticket", "pick up a ticket"). Run the full flow starting at Step 1.
-- **Existing-changes mode.** The user points at work already done locally and just wants it shipped as a PR — e.g. **"ship these changes as a PR"**, "open a PR for what I've got", "ship this diff". This is invoked when code has already changed locally without starting from a ticket. In this mode:
-  - **Skip ticket creation and ticket selection entirely** — do **not** read the `ticket` skill, do **not** create a Linear ticket, and do **not** browse for one to attach. Only create or attach a ticket if the user explicitly asks for it in this invocation.
-  - **Skip the Linear steps** — Step 1 (Select ticket), the Linear status transitions, and the Linear progress log. There's no ticket, so there's nothing to move or comment on. PR bodies omit the `Closes <LINEAR-ID>` line (there's no id).
-  - **Jump to the PR flow.** Treat the existing working-tree changes as the implemented end state (the output of Step 5a) and continue from there: Step 5b (deslop), Step 5c (review the diff / decide on stack breakup), Step 5d (split into a stack), Step 6 (submit + review loop), and Step 7 (merge) — all unchanged.
-  - Everything else (approval gates, review loop, merge gate, screenshots, no-force-push rules) applies exactly as in ticket mode.
+- **Changes already exist locally** — the working tree is the implementation. Skip straight to deslop + stack.
+- **A Linear ticket is referenced** — read it via the Linear MCP to understand what to build. The ticket is just the spec here: read it, build it, done. Leave the ticket itself alone (status, comments, assignee) unless the user asks. If the invocation references Linear and the Linear MCP isn't available, stop and tell the user — don't guess at the ticket's contents.
+- **A plain-text ask** — the prompt itself describes the change. Just build it.
 
-## Required tools
+One special case: if the working tree holds a skeleton from the `probe` skill (stub files sketching the change's load-bearing decisions — schema, interfaces, signatures, module layout), that skeleton is the **agreed architecture** — the user already reviewed it, possibly after shaping the whole thing with `advisor` first (`advisor` → `probe` → `ship` is the pipeline for very complex changes). Fill in the details on top of it; don't redesign the shape it laid down, and raise it explicitly if implementation genuinely forces a deviation.
 
-- **Linear MCP** — to read tickets, list issues, change status, and post comments.
-- `gt` (Graphite) — PR stack
-- `gh` (GitHub CLI) — PRs and review-agent comments
+## Tools
 
-If any is missing, stop and ask.
+Nothing is strictly required. Linear MCP, Graphite (`gt`), and `gh` all help, but work with what's installed:
 
-## Approval gates
+- No `gt` → single PR (or plain git branches) instead of a stack.
+- No `gh` → push the branch and give the user a compare URL; the review loop obviously needs `gh`, so tell them it's off.
+- Linear MCP only matters when the invocation actually references a ticket (see above).
 
-The agent never advances past these without explicit user confirmation ("yes", "approved", "merge", etc.). Permission does not carry over between gates.
+## Implementing (when the code isn't written yet)
 
-| #   | Gate                 | When                                                                                |
-| --- | -------------------- | ----------------------------------------------------------------------------------- |
-| 1   | Task selection       | Only when the ticket is ambiguous or conflicts (Step 1)                             |
-| 2   | Plan approval        | Only when the ticket asks for it (Step 2)                                           |
-| 3   | Missing dependencies | Only when the ticket requires deps/services not already set up in the repo (Step 2) |
-| 4   | Stack breakup        | Only when the work is complex or the ticket was ambiguous (Step 5c)                 |
-| 5   | Merge                | Always, before merging any PR in the stack                                          |
+Don't draft a plan first — just build. If something is genuinely ambiguous, ask; otherwise trust your read of it.
 
-## Progress checklist
+Work in a fresh worktree off `main` unless you're already sitting in one (harness-provided worktrees count — use them, don't nest). Implement the whole thing end-to-end on one working branch, uncommitted, until lint/typecheck/tests pass — and actually exercise the behavior if it's observable, don't let green lint stand in for "it works".
 
-Copy this into the response and tick as work progresses. In **existing-changes mode** (see "Two entry modes"), drop steps 1–3 and the Linear-status line in step 8 — start at step 4 (or 5b if the worktree is already the one holding the changes).
+Then run the `deslop` skill on the working tree if it's installed (skip silently if not).
 
-```
-- [ ] 1. Select ticket
-- [ ] 2. Read ticket; decide plan-first vs. straight-to-implement
-- [ ] 2b. Verify required dependencies are present — flag any missing (gate)
-- [ ] 3. Plan (if required) — approved
-- [ ] 4. Worktree + branch
-- [ ] 5a. Implement end-to-end on the working branch (no stack yet)
-- [ ] 5b. Deslop the working tree
-- [ ] 5c. Review the full diff; decide whether to gate; if gating, generate the brief (DRAFT mode) + propose stack breakup — approved
-- [ ] 5d. Split the implemented changes into the Graphite stack
-- [ ] 6. Submit stack; per-PR loop until checks green + review clean (or user-approved)
-- [ ] 6a. For each UI-affecting PR: embed before/after screenshots **in the PR body** (not just the chat reply) and confirm they render
-- [ ] 6e. Review complete → generate the brief (FINAL mode)
-- [ ] 7. User merge signal → generate migrations; merge bottom-up
-- [ ] 8. Linear → Done; clean up worktree; report
-```
+## Splitting into a stack
 
-## Linear progress log
+Look at the full diff and propose a breakup:
 
-> Skipped entirely in **existing-changes mode** — there's no ticket to comment on.
+- Slice by functionality, not code shape — each PR should deliver something observable on its own. Helpers ride with their first caller; no scaffolding-only PRs.
+- **Gate on the user only when it's warranted**: complex work (multiple subsystems, auth/schema/payments, new architecture) or an ambiguous ask where they should sanity-check your interpretation. Bounded work with an obvious shape → post the proposal as an FYI and keep moving. When unsure, gate.
 
-Post a short comment to the Linear ticket via the Linear MCP at each milestone below. Comments are status entries, not transcripts — one or two lines plus links. Avoid logging chat-level back-and-forth.
+Then split: snapshot the end state, rebuild branch by branch, each branch passing checks against its parent, cumulative diff matching the snapshot exactly. If there's no Graphite, one PR is fine — don't force a stack.
 
-| Milestone                           | Comment content                                      |
-| ----------------------------------- | ---------------------------------------------------- |
-| Work started (Step 4)               | branch + worktree created; "starting implementation" |
-| Plan posted (Step 3, if applicable) | link or paste of the plan, awaiting approval         |
-| Stack breakup approved (Step 5c)    | the approved breakup                                 |
-| Stack submitted (Step 6)            | list of PR URLs                                      |
-| Review round complete (Step 6)      | "round N: X findings, Y fixed, Z skipped" + outcome  |
-| Merge complete (Step 7)             | merged PR URLs in order                              |
+## Creating PRs
 
-## Linear status transitions
+- **Always ready-for-review, never draft.** Drafts just stall the auto-review. (Watch out for `gt submit --no-interactive` — it defaults to draft, so pass `--publish`.)
+- **Title**: conventional commits (`feat(scope): …`). **Body**: short — what changed and why, enough for a reviewer to orient.
+- **Before/after screenshots for anything user-visible.** They go in the PR body itself, not just the chat — the PR is where reviewers look. Capture the *after* from the actually-running app; capture the *before* from the PR's own base branch (its parent in the stack — using `main` for a stacked child would smuggle the parent's changes into the comparison).
+  - If the page sits behind a login, use the user's own browser session (drive their signed-in browser via the browser tools) rather than creating test users or hacking around auth. If that's not available, ask — don't declare it blocked.
+  - If the view renders empty just because there's no data, mock some data for the shot, then revert the mock so it never reaches the diff.
+  - Embed as GitHub attachment URLs (`user-attachments/...`), not files committed to the branch — repo links don't render reliably in PR bodies and throwaway images bloat the diff. After editing, double-check the images actually render.
 
-> Skipped entirely in **existing-changes mode** — there's no ticket to move.
+## Review loop (interactive — this is the important part)
 
-Move the ticket via the Linear MCP at each transition below. The workspace's available state names vary — look them up via the MCP and pick the closest semantic match.
+Codex reviews the PRs remotely. **Only Codex** — ignore CodeRabbit, Greptile, and any other bot entirely. Don't triage their comments, don't reply to them, don't let them block anything.
 
-| When                                               | New status    |
-| -------------------------------------------------- | ------------- |
-| Step 2 (committing to work the ticket)             | `In Progress` |
-| Step 6 (stack submitted, awaiting review/approval) | `In Review`   |
-| Step 6 (fixing review findings — back on the work) | `In Progress` |
-| Step 7 (final merge complete)                      | `Done`        |
+The loop, per round:
 
-If the chosen state doesn't exist, ask the user once which equivalent to use and remember the mapping for the rest of the run.
+1. **Wait for findings.** Codex takes ~6–7 minutes, so schedule a check-in around then (ScheduleWakeup or whatever the harness gives you) rather than blocking or making the user ping you.
+2. **Report, don't fix.** When findings land, print them for the user: each finding, a link, and your honest take on whether it's valid or not (see "Judging findings" below). Then **wait**. Never fix a finding without the user saying which ones to fix — not even the obviously-valid ones.
+3. **Act on the user's picks.** The default is fix-and-push: "fix it", "fix 1 and 3", or any plain approval means commit and push the fixes as new commits (never amend or force-push — the user reviews the PR commit by commit, and rewritten history destroys that), reply on each finding's thread ("Fixed in `<sha>`" for fixes, "Skipping: `<reason>`" for the rest), update the PR description with the skips (step 4), and retrigger the review (step 5). Every Codex comment gets closed out one way or the other — nothing left hanging.
 
----
+   The exception is when the user explicitly says **"locally"** — "fix it locally", "fix locally first" — which means: make the fixes in the working tree only, no commits, no pushes. They want to eyeball the fix before it touches the PR. Show them what changed and wait; a later "push it" (or similar) graduates the local fixes to the PR via the same fix-and-push sequence above.
 
-## Step 1 — Select ticket
+4. **Record the skips in the PR description.** Keep an `## Explicit skips` section at the bottom of the body — one bullet per skipped finding with the reason. This is what stops the next round from re-flagging the same thing, so write the reason for the reviewer, not for the user.
+5. **Retrigger the review** (`@codex review`) and schedule the next ~7-minute check-in. New findings → back to step 2, same rules: report, wait for the user, then act.
 
-**Scope to the current project's Linear team.** List the workspace's teams and pick the one whose name / key / linked GitHub repo matches the current project directory. If the match is ambiguous, ask the user once and remember the mapping for the rest of the run. All ticket lookups, listings, and status changes in this run go against that team only.
+Also keep CI green throughout — treat a red check like a finding you can fix without asking (it's not a judgment call, it's broken).
 
-If the user referred to a specific ticket (by name, phrase, or id), find it within that team via the Linear MCP. Otherwise, surface a shortlist of actionable tickets (states resembling `Todo` / `Backlog`; exclude `Blocked`) from that team for the user to pick from.
+**Done when**: all checks green, no unaddressed Codex findings, every finding either fixed or explicitly skipped. Say so and stop — the PRs are the deliverable, and merging is the user's call on their own time.
 
-Either way, **filter conflicts** before settling on the ticket:
+## Judging findings
 
-- Dependency / `Blocked by` relations pointing at unfinished work.
-- Scope overlap with any other Linear issue currently `In Progress` / `In Review`.
-- Overlap with any **non-stale** open PR — `gh pr list --state open --json number,title,updatedAt,headRefName,labels`. Stale = no commits in ~14 days; treat stale PRs as abandoned.
+When you report findings, give the user a real opinion, and calibrate it to what this product actually is. Most of what goes through this skill is MVP-stage: few or no users, no data in the old shape, no external API consumers. Reviewers don't know that — they flag as if everything is a mature multi-tenant system.
 
-**PR overlap is a lead, not a conflict.** Touching the same file as an open PR rarely blocks anything — inspect its diff (`gh pr diff <num>`) and gate **only** if the two changes rework the same logic, the PR restructures code this ticket builds on, or the ticket depends on the PR's change. Otherwise proceed from `main` with a one-line note; trivial rebase conflicts get resolved later. "Might conflict" is not a reason to stop.
+So before calling a finding valid, ask what it implicitly assumes and whether that holds here:
 
-**Only stop for user input when there's genuine ambiguity.** If the user named a specific ticket and no blocking conflicts surfaced, **proceed directly to Step 2** — don't ask for redundant confirmation. Stop only when:
+- **Backward compat / "this is a breaking change"** — if there's no existing usage, no persisted data in the old shape, and no external callers, the right move is a clean break. Shims, dual-writes, deprecation windows, and data migrations for data that doesn't exist are complexity with no payoff. Lean Skip. But if you _can't_ confidently establish there's no existing usage (populated table, shipped feature, public API), say so and let the user decide — don't assume it away.
+- **Scale/concurrency the product won't hit** — race guards on single-user flows, advisory locks against a double-click, rate limiting on internal endpoints. Lean Skip.
+- **Deploy shapes the project doesn't have** — code-runs-before-migration windows, cross-version rolling-deploy traffic on a single-instance app. Lean Skip.
+- **Real bugs** — actual correctness, security, or data-loss issues that would bite at the current scale. Lean Fix.
+- **Fix cascades** — if a finding only exists because an earlier defensive fix created the window it guards, the whole chain is probably skippable.
 
-- No ticket was specified, or
-- The user's phrase matches more than one candidate, or
-- The chosen ticket has a real conflict (unfinished dependency, scope overlap with an in-flight ticket, or a **verified entanglement** with a non-stale open PR per the inspection above — never mere file overlap).
-
-In any of those cases, present 3–5 candidates with one-line summaries (or surface the specific conflict) and wait for the user to pick or resolve.
-
-## Step 2 — Read ticket; decide path
-
-Read description, comments, attachments, status.
-
-- **Plan-first?** If the ticket explicitly asks for human plan approval ("plan first", "approve plan", "review plan before implementing"), do Step 3. Otherwise skip it.
-- **Resume vs. restart?** If a worktree, branch, or open PR stack already exists for this ticket, **do not silently resume**. Resuming abandoned work and restarting live work are both costly mistakes — the wrong default has burned full implementation sessions in the past. Inspect what exists first: is the worktree on disk with recent uncommitted/committed work? Does the branch have a meaningful diff against `main`? Are the PRs in the stack still in active review? If the answer is yes on all counts and the user's prompt is consistent with continuing (no "ignore previous", no "start over"), resume there. Otherwise — branch with no diff, worktree gone, PRs gone stale, or any signal the prior attempt was abandoned — surface a one-line inventory of what was found (branch name, last commit timestamp, PR URLs and states) and ask the user once whether to resume or start fresh. An explicit user override in the prompt ("ignore the previous attempt", "continue where we left off") is sufficient on its own and skips the question.
-
-Apply the Step 2 status transition (see table above).
-
-## Step 2b — Verify required dependencies (gate)
-
-Before any implementation (and before Step 3 if planning), enumerate the **external dependencies and one-time setup** the ticket requires: SDKs / npm packages, framework primitives that need installation (e.g. cron, queues, workflows, auth providers), managed services that need provisioning (databases, vector stores, third-party APIs), environment variables, and infra config (e.g. `vercel.ts`, `vercel.json` entries, cron schedules).
-
-For each, check whether it's **already present** in the repo:
-
-- Package installed in `package.json` / lockfile?
-- Setup files in place (e.g. cron defined in `vercel.ts`/`vercel.json`, workflow runtime configured, env keys in `.env.example`)?
-- Service provisioned and credentials available?
-
-**Stop and ask the user** if anything required is missing. Do **not** install packages, add cron schedules, provision marketplace integrations, or modify project-level config (`vercel.ts`, `package.json` deps, `.env.example`, etc.) as part of this skill's run — the user wants to handle these manually. Report the gap as a short bulleted list and wait for the user to either:
-
-- install/set up the dependency themselves and tell you to proceed, or
-- explicitly authorize you to install/configure it as part of the ticket, or
-- redirect (descope the ticket, pick a different approach that uses existing deps, etc.).
-
-Only proceed once every required dependency is in place or the user has explicitly authorized the missing setup. Tickets should consume existing infrastructure; new infrastructure is the user's call.
-
-## Step 3 — Plan (only if required)
-
-Post a concise, high-level plan of **how the feature will be implemented**: the approach, the major steps to take, key technical decisions, anything ambiguous in the ticket that needs the user's call, and how it'll be verified. Do **not** break it into PRs here — the stack breakup happens later in Step 5c after reading the code.
-
-Wait for explicit approval before proceeding.
-
-## Step 4 — Worktree + branch
-
-**First check the current working directory.** The agent is most likely already running inside a freshly-prepared worktree (the harness often spawns it that way). If so — clean working tree, no other in-flight ticket bound to this branch — just use it. Don't create a new worktree on top.
-
-If the current directory is **not** already a usable worktree (e.g. it's the main repo checkout, or it has unrelated uncommitted work), create a fresh worktree off `origin/main` for this ticket.
-
-In either case, ensure Graphite tracking is initialized against `main` before continuing. All subsequent work happens inside whatever worktree you settled on.
-
-**Branch name (when creating a new branch):** `<agent-name>/<short-slug>` (e.g. `<agent>/feed-pagination`). The agent-name prefix is whatever names this local agent — it namespaces concurrent agents working in the same repo so they don't collide. Don't put the Linear id in the branch name; it goes in the PR body via `Closes <LINEAR-ID>`. If you're reusing an existing worktree, keep its current branch name regardless of whether it matches this convention — don't rename.
-
-## Step 5 — Implement, then split into a stack
-
-The PR stack is a **post-hoc** organization of the work, not a prediction of it. A lot is discovered during implementation; trying to plan the stack up front is brittle. So: implement freely first, then look at the diff and group it.
-
-### 5a. Implement end-to-end on the working branch
-
-Read affected code as needed and implement the full feature on the single working branch from Step 4. **Do not commit during implementation** — keep all changes in the working tree. Iterate until lint/typecheck/tests pass against the uncommitted state.
-
-**Lint, typecheck, and tests passing means the code is well-formed — not that the feature works.** For a change with observable behavior — a UI interaction, a rendered view, an endpoint's response — actually exercise it: drive the route, render the component, call the endpoint, and confirm it does what the ticket asked. When you can't reach the behavior — the route sits behind auth and the dev session bounces you to `/`, the change needs data you haven't seeded, an external service isn't wired up — don't quietly let a green lint stand in for verification. Either get past the blocker or tell the user plainly what you couldn't verify and why, so they can confirm it before merging. For an auth wall specifically, **prefer the user's already-authenticated browser session** — drive their signed-in Chrome profile via browser automation rather than an anonymous session — before settling for "auth blocks verification"; other blockers, seed the data or add a focused test that exercises the behavior directly. Don't create users, bypass auth, or add temporary auth code to get a screenshot; if the authenticated-session path isn't available, ask the user for it rather than working around auth. A UI change that lints clean but was never run looks finished and reaches review broken — which is how it comes back as a review finding or a post-merge surprise.
-
-**Hold migrations.** Don't generate migration files yet (Prisma `migrate dev`, Drizzle `drizzle-kit generate`, Rails `db:migrate`, Django `makemigrations`, etc.). Schema source files (`prisma/schema.prisma`, `db/schema.ts`, etc.) can change freely; numbered migrations are generated at merge time (Step 7) so they don't collide with parallel work.
-
-**Match backward-compat to the product — don't assume either way.** Backward-compatibility work — compat shims, legacy fallbacks, dual-writes, deprecation paths, data-backfill migrations — is the right call for some products and pure complexity for others, so figure out which this is before you add _or_ omit it. An MVP/prototype with no production usage, no data persisted in the old shape, and no external callers wants a clean break: rename the function, change the contract, drop the old enum value, and don't write the bridge back to a past that isn't there. A product with real users, persisted data, or external API consumers wants the opposite — there a clean break loses data or breaks callers. Read the cues: a populated old-shape table, public API docs, or a ticket implying live users point toward preserving compatibility; an empty schema and "prototype" framing point toward a clean break. When the cues don't settle it, **ask the user which kind of product this is before building (or skipping) the compat path** — don't guess. Guessing wrong is costly in both directions: an unnecessary shim is complexity the user has to catch in review and ask you to strip back out, and a missing one can break real usage. This is the same judgment that governs review-finding triage in Step 6, applied earlier — at implementation time, before any reviewer flags it.
-
-### 5b. Deslop the working tree (only if the `deslop` skill is present)
-
-If a `deslop` skill is available, run it against the working tree before reviewing the diff or splitting the stack. It removes AI-generated code patterns (unnecessary comments, defensive overkill, type escape hatches, single-use variables, separate prop interfaces, style drift) so reviewers see clean code on the first push instead of patterns that will inevitably show up as review-agent findings later. Cleaning here once is cheaper than fixing the same things across N PRs in the review loop.
-
-Re-run lint/typecheck/tests after deslop in case the cleanup touched anything that needs verification.
-
-If the skill isn't installed in this environment, skip this step — don't attempt to deslop manually, and don't block the workflow on it.
-
-### 5c. Review the full diff; propose stack breakup (conditional gate)
-
-Inspect the working-tree diff against `main` (e.g. `git diff main --stat`, then read the changes including untracked files via `git status`). Group similar functionality into a thorough-but-concise stack proposal. One bullet per branch, in stack order. Each: branch slug, one-line summary, scope (small/medium), key files.
-
-**Slice by functionality, not by code shape.** Each PR should deliver an observable piece of the feature on its own. Helpers, types, and shared utilities ride along with the **first PR that uses them** — don't create a slice whose only content is plumbing for a later PR (e.g. "add X type", "extract Y helper for upcoming feature", "scaffolding for Z enforcement"). A standalone _refactor_ PR is fine when the refactor itself is the deliverable (e.g. extracting an existing hook for reuse, renaming a module, splitting a file that's already overloaded) — but a _scaffolding_ PR that only exists to make the next PR smaller is the wrong split. If you find yourself proposing "Account Helpers" → "Account Enforcement" → "Account UI," collapse them: the helpers land with whichever functional slice first calls them.
-
-```md
-**Proposed PR stack** (3 PRs, bottom → top)
-
-1. `<agent>/feed-loader-refactor` (small) — extract `useFeedLoader` (refactor is the deliverable, not setup for later PRs). Files: `app/feed/feed.tsx`, new `app/feed/use-feed-loader.ts`.
-2. `<agent>/feed-pagination-server` (medium) — server action + cursor query; `Cursor` type and DB helper land here because this is where they're first used. Files: `lib/db.ts`, `lib/feed-types.ts`, `app/feed/actions.ts`, schema additions (migration deferred).
-3. `<agent>/feed-pagination-ui` (medium) — wire infinite scroll + tests. Files: `app/feed/feed.tsx`, `__tests__/feed.test.tsx`.
-```
-
-**Decide whether to gate.** The stack-breakup gate is **not always on** — it exists for cases the user genuinely needs to review before code is split and shipped. Use judgment along two axes:
-
-- **Complexity** — does the change touch multiple subsystems, introduce new architecture/patterns, alter data flow, or carry non-trivial risk (auth, schema, payments, public API surface)? Or is it bounded — a focused bug fix, a small feature, a refactor inside one module?
-- **Ambiguity** — did the ticket prescribe the approach (clear acceptance criteria, one obvious implementation path)? Or did it leave significant decisions open (multiple viable approaches, vague scope, design calls that aren't spelled out)?
-
-Gate when **either** axis is high: complex work, or ambiguous tickets where the user should sanity-check the interpretation before PRs go up. Skip the gate when the work is bounded **and** the ticket prescribed the approach — in that case go straight to 5d. Don't reduce this to PR count; a 3-PR refactor inside one module can be auto-go, a 1-PR change to auth middleware should gate.
-
-If unsure, gate — the cost of a quick approval is small; the cost of an unwanted stack is large.
-
-**If gating:**
-
-- Generate the visual brief — invoke the `brief` skill if it's installed. It auto-detects DRAFT mode from the working-tree state and produces a visual HTML one-pager for fast approval.
-- Always include the full stack proposal as text in the response, whether or not the brief was generated — the brief is a supplement. When `brief` is installed, also give the brief's path.
-- Wait for explicit approval. The user may split, merge, or reorder — adjust and re-show. No splitting begins until approved.
-
-**If skipping the gate:**
-
-- **Do not** invoke `brief` here — the FINAL-mode brief generated at Step 6e is sufficient when the user hasn't been asked to pre-approve the stack.
-- Post the stack proposal as a brief informational note (so the user can still interject), then proceed straight to 5d without waiting.
-
-### 5d. Split the implementation into the Graphite stack
-
-Replay the working-tree changes onto a clean Graphite stack so each branch contains exactly the slice approved in 5c:
-
-1. **Preserve the implemented end state first** — the implementation is uncommitted and losing it costs the whole feature. Simplest options: `git stash --include-untracked`, or make a single snapshot commit on a parked branch (e.g. `git checkout -b <branch>-snapshot && git add -A && git commit -m "snapshot"` then return to the working branch).
-2. **Reset back to `main`** and build the stack branch by branch via Graphite. For each branch, apply only the slice of the diff that belongs on that branch (e.g. selective patch application from the snapshot).
-3. **Each branch must pass lint/typecheck/tests on its own**, with its parent branch in the stack as the base (not `main`). Each PR is reviewed and CI'd against its parent — Graphite restacks children onto `main` only as parents merge. So slice the work so every branch is self-contained relative to the stack: types, scaffolding, and dependencies introduced before the code that uses them. **Don't use `--no-verify`** — if a branch can't pass hooks, the slice is wrong; rework the breakup. This may mean re-proposing 5c to the user.
-4. **No "ahead of time" code — every newly introduced function, component, type, or export in a PR must be _used_ (called, rendered, referenced) in that same PR.** It is not enough that a later PR in the stack will eventually use it. If a symbol is introduced in PR N but its first caller lives in PR N+1, move the symbol down to PR N+1 (where it's actually wired up). Reviewers cannot reason about dead code — they have to mentally hold "this exists for something coming later" across PRs, which is exactly the failure mode this rule prevents. Concretely: for each branch, check that every new top-level export/component/function it adds has at least one caller within that same branch's diff; a symbol with zero in-branch callers is an orphan — relocate it. **Exception: schema changes.** A standalone schema PR (e.g. DB schema + generated migration, with no in-PR callers of the new columns/tables yet) is fine and often preferable — schema lands cleanly on its own, gets reviewed for shape independently of feature code, and unblocks the feature PRs above it. The "must have a caller in this PR" rule applies to application code (functions, components, helpers, types used only in app code), not to schema/migration files.
-5. **Confirm equivalence at the end.** The cumulative diff of the top branch against `main` must match the preserved end state exactly: `git diff <top-branch> <snapshot>` should be empty. If it isn't, the split is wrong — fix before submitting.
-
-This reset-and-rebuild pattern (snapshot, `gt modify`, re-slice) is **5d-only** — it's safe because the stack isn't published yet. Once it's submitted, the rules change (see Step 6).
-
-## Step 6 — Submit stack; review loop
-
-> **The stack is now append-only.** Review-finding fixes are new commits added on top (`git commit` → `gt submit`) — never `gt modify`/amend, never reset-and-rebuild, never force-push. (See point 6 and Rules.)
-
-The review agent runs **remotely on the PR** — it's a GitHub-side bot that reads the PR's diff and posts findings as PR comments. The local agent does not run the review; it only waits for the remote agent to post and then reads its comments via `gh`.
-
-The active review agent for this project is **Codex** — the agent-specific bindings (latency, author name, retrigger command) live inside the loop below. To swap in a different review agent later, change only those bindings.
-
-Submit the stack via Graphite — one PR per branch. **Always open every PR as ready for review — never as a draft.** Pass `--publish` explicitly when submitting non-interactively: `gt submit --no-interactive` opens new PRs as **drafts** by default, so `--publish` is required to avoid a wasteful "mark ready for review" round-trip that delays the auto-review. Never pass `--draft` (or Graphite's draft equivalent), and don't fall back to draft for intermediate/known-broken states; if a PR genuinely isn't ready, say so in chat and let the user decide rather than silently shipping a draft. This holds in both entry modes — including existing-changes mode, where the tendency to default to draft is strongest. PR creation auto-triggers a review on each new PR, so a draft would just stall the review loop.
-
-**Keep every PR green.** Checks run on creation and re-run on every push. Treat a red check like a review finding: read its logs — `gh pr checks` only lists which checks passed/failed (state, link, workflow), not the error output, so open the failing check's link or pull the actual log via the run (`gh run view <run-id> --log-failed`, or `--log`), then fix it with an additive commit (new commit, never amend/force), and push — watch checks on the same tick as review comments, and don't wait to be told. If a check is red for something only the user can fix (flaky infra, a user-controlled secret), say so and hand it over rather than looping.
-
-**Before/after screenshots.** When a PR changes something user-visible, include before and after screenshots **in the PR itself** — its description, or a PR comment if upload to the body fails. This is a deliverable on the PR, not something you satisfy by attaching the screenshot to your chat reply to the user; visual verification belongs where reviewers and the brief will look for it. A UI PR is not review-complete (Step 6a / checklist) until its screenshots are on the PR and confirmed rendering. Capture the after-state from the running app you exercised in Step 5a, and the before-state from **that PR's own base** (its parent branch in the stack, since each PR is reviewed against its parent per Step 5d — `main` only for the trunk-most PR). Don't use a `main` screenshot as the before-state for a PR stacked above the trunk-most branch: that would fold lower-stack UI changes into the child's before/after, making them look like the child's work and misleading reviewers and the final brief. If the route is protected by auth, use the user's already-authenticated Chrome session via the Chrome browser plugin before declaring screenshots blocked; do this by default rather than waiting for the user to repeat it. Put screenshots in the PR body where the visible change actually lands. Skip when there's nothing to see. If the view renders blank only because there's no data (e.g. a new dashboard with no rows), don't skip — mock up data to capture the populated state, then revert the mock so it never reaches the diff.
-
-**Embed them as GitHub attachment URLs — not repo file links.** Upload each image to GitHub (paste or drag it into the PR description editor, which mints a `user-attachments/assets/...` URL) and reference that URL in the body. Do **not** commit the screenshots to the branch and link them via `blob/...?raw=true` or other repo URLs: GitHub won't reliably render those inside a PR body — they resolve through authenticated/raw endpoints the rendered `<img>` can't fetch, especially on a private repo, so they show up as broken — and committing throwaway images bloats the diff. After editing the body, reload the PR and confirm the images actually render rather than appearing broken.
-
-For **each PR** (bottom-up), run this loop until either the PR is clean — CI checks green **and** no actionable review findings — **or** the user gives a merge signal (Step 7), whichever comes first:
-
-1. **Wait for the review** to post — but **don't block-wait or hand it back to the user to ping you.** The moment the stack is submitted, proactively set up a watcher to fetch each PR's comments on a cadence and surface anything new; setting one up is the default, not something you do only when asked. Latency is agent-specific — for Codex, ~6–7 min is typical. Use whatever periodic-watcher mechanism the harness exposes: under **Codex this is the automation / scheduled-task system** — create a recurring automation that re-checks the PRs; under Claude Code it's a recurring scheduled check or polling loop. Only if no such mechanism is available, fall back to a single delayed wake (e.g. `ScheduleWakeup` at ~400s, kept under the prompt-cache TTL) and re-arm after each fetch.
-
-   **Watcher lifecycle:** the watcher exists **to catch review findings and failing checks** — it is not responsible for waiting on the user's merge approval. Create it once when the stack is first submitted, and keep it running across all PRs and rounds while findings or check fixes are outstanding.
-
-   **Per-PR review-complete condition.** A PR is complete for the watcher's purposes when any of:
-   - It has been merged (no longer in the open set), or
-   - It is clean: **all CI checks are green**, the review agent has reacted 👍 on the PR body, **and** every finding raised so far has been resolved (fixed and pushed, or explicitly skipped), with no new findings on the most recent re-review.
-
-   **Tear down the watcher** when **all** PRs in its scope are review-complete (the condition must hold across every PR being watched — not just one). Whenever a single PR becomes review-complete, narrow the watcher's scope to drop that PR but keep watching the rest; stop the watcher entirely once nothing is left to watch. **Don't keep the watcher alive just to wait for the user's merge approval** — once findings are done, stop it, report that review is complete, and leave the merge (Step 7) for the user to trigger on their own time.
-
-   Also tear it down immediately if:
-   - The user gives an early merge signal in chat — the merge step takes over.
-   - The workflow exits abnormally (user cancels, error path) — so the watcher doesn't keep firing in the background.
-
-   Never leave a watcher running after review is complete or the workflow has moved on to merge/cleanup.
-
-2. **Fetch comments and PR-description reactions**:
-   ```bash
-   gh pr view <num> --json comments,reviews
-   gh api repos/{owner}/{repo}/pulls/<num>/comments --paginate
-   gh api repos/{owner}/{repo}/issues/<num>/reactions    # reactions on the PR body itself
-   ```
-3. **Extract review findings and clean-bills.**
-   - **Findings** — for Codex, comments authored by `chatgpt-codex-connector` / `codex` or matching its summary format.
-   - **Ignore CodeRabbit findings.** CodeRabbit is **not** the active review agent for this workflow — only Codex is. Any comments, reviews, or summaries authored by CodeRabbit (`coderabbitai` / `coderabbitai[bot]`, or matching its summary/walkthrough format) are **out of scope**: don't extract them as findings, don't triage them, don't add them to the review ledger, and don't fix, reply to, or record skips for them. Filter them out entirely when reading comments, and never let a CodeRabbit comment block a PR from being review-complete. Only Codex findings drive the loop.
-   - **Clean bill of health** — some review agents react with a 👍 (`+1`) on the PR description when they find no issues. For Codex, a `+1` reaction on the PR body authored by the review agent means "no findings on this PR." Treat this as the clean signal for the PR.
-   - **Review ledger** — keep a running list of every distinct finding across all rounds and PRs. Each entry should capture the PR, source link, a short plain-English explanation of the issue, the Fix/Skip decision, and the final outcome: fixed with the commit/approach used, skipped with the reason, or held for the user's call. This ledger is what makes the final review-complete report useful instead of a vague "review is clean" status.
-4. **Triage each finding** into one of:
-   - **Fix** — real bug, correctness issue, security issue, or other clear defect that is realistic for this product at its end state.
-   - **Skip** — nit, style-only, false positive (the reviewer misread the code), already handled, overly-defensive (adds complexity for scenarios that won't realistically occur — redundant null checks on framework-guaranteed values, error handling for impossible states, excessive validation on internal-only paths), **or unrealistic for this product**.
-
-   **Realism check.** Before classifying as Fix, ask: is this finding actually realistic for **this product** at the **end state we're building toward**? Every finding implicitly assumes something — about scale, concurrency, deploy ordering, traffic shape, who calls the code, or whether there's existing usage to protect — and the question is whether that assumption holds here. Common ways it doesn't:
-   - **Scale/concurrency the product won't hit** — concurrency hardening on a flow that runs serially or for a small user base, atomic guards / advisory locks / raw SQL defending a single-tenant low-volume action against the same user double-clicking, rate-limit edge cases on internal endpoints, race fixes on a cron job that runs once at a time.
-   - **Deploy/operational shape the project doesn't use** — defending against app code running before its own migration when migrations always ship with the code, cross-version traffic during a rolling deploy on a single-instance app, replica lag in a single-region setup.
-   - **Calling surface that doesn't exist** — concurrency on a path only invoked from one operator console, auth hardening on an endpoint never exposed externally.
-   - **Backward compatibility / existing usage that doesn't exist** — most of this code is MVP / prototype with **no production usage, no persisted data in the old shape, and no external callers** depending on the current behavior. Findings of the shape "this is a breaking change," "preserve the old API / signature / response shape," "add a compatibility shim / deprecation path," "migrate existing rows / existing callers," or "don't change this enum/field/default because something might rely on it" assume an installed base that isn't there yet. When there's no existing usage, the right move is to **just change the thing cleanly** — no shims, no dual-write, no deprecation window, no defensive migration of data that doesn't exist. Default these to Skip. **The load-bearing assumption is "there is no existing usage." If you cannot confidently establish that** — e.g. the feature looks already-shipped, there's a populated table in the old shape, there are external/public API consumers, or the ticket implies live users — **do not assume it away. Stop and ask the user** whether existing usage needs to be preserved before deciding Fix vs. Skip (see point 5). It is fine to pause here and verify rather than guess.
-
-   Watch for **fix cascades**: if a finding only exists because an earlier defensive fix opened the window it's now guarding (e.g. a seeding step introduced a stale-read race, which a guard introduced a hot-path cost, which another fix tries to optimize), the whole chain is usually skippable — the cascade itself is a signal the first fix shouldn't have landed. Don't reach for raw SQL / advisory locks / extra schema columns to defend a hypothetical when a transaction or a one-line comment would do.
-
-   **Migration-ordering findings are the canonical cascade trigger** and should be Skip by default. Anything of the shape "what if app code runs before its backfill / what if a row exists with default usage before the migration corrects it / restore-or-create the missing row in the request path" assumes a deploy window that doesn't exist here — migrations ship with the code and apply before the new code serves traffic. The right shape is a migration + a backfill, full stop; per-request reconciliation, in-flow seeding, or "ensure account exists" guards in business logic are the first link of the cascade. Skip them on sight rather than implementing and then unwinding later.
-
-   If the scenario won't occur in this product's actual usage, classify as Skip. The goal is to fix real bugs, not gold-plate the code — reasonable assumptions about how this app is deployed and used are allowed. But don't default to Fix just because the reviewer raised it, and don't silently Skip something the user might want; genuine uncertainty about realism — especially whether existing usage must be preserved — is a question for the user (point 5), not a coin flip.
-
-5. **Triage autonomously and report — but stop and ask whenever you're not sure.** For findings you have a confident position on, decide Fix vs. Skip yourself and act on them (point 6) without waiting. But if the realism check left you genuinely unsure — most often a backward-compat finding where you can't confirm whether existing usage must be preserved — **don't pick a side to keep the loop moving.** Break the loop: pause and ask the user about those specific findings before acting on them; the rest of the round proceeds in parallel. Verifying costs a message; guessing wrong costs a bad fix or a shipped regression. Post a status message either way so the user can interject. Format:
-   - **Context header** at the very top: ticket id + title, a one-line summary of what this stack is shipping, and a compact list of the PRs (slug + URL). The user shouldn't need to open anything to recall the scope.
-   - **Per-PR review status**: for each PR, one of `clean` (review agent reacted 👍 on the PR body), `findings: N` (with N findings to address this round), `awaiting review`, or `re-review pending` (after a retrigger). Note CI state here too (e.g. `checks: 2 failing`) so a red PR is visible alongside its review state.
-   - **Findings this round** with the agent's autonomous Fix/Skip decision + one-line reason + source link. New-this-round and carried-over both shown for clarity. Skip findings appear once and are not carried forward. Add or update the matching review-ledger entry while reporting the round so the final summary is complete without reconstructing history from memory.
-   - **Next action**: "fixing the N valid findings, recording N skips on the PR, and retriggering review" (or "no fixes — recording N skips on the PR and retriggering review", or "no actionable findings and no skips — waiting for next watcher tick"). If any findings are held for the user, say so explicitly here — e.g. "holding M findings for your call on whether existing usage must be preserved; acting on the rest" — and make clear those M are blocked pending the user's answer.
-
-   For the findings you're confident about, don't wait — proceed straight to point 6. For any finding you flagged as uncertain above, hold it and wait for the user's answer before acting on it; the loop continues for the rest. The user can also short-circuit the whole loop at any time via a chat merge signal or a GitHub `APPROVED` review (see Step 7).
-
-6. **Act on the findings.**
-
-   **For each Fix finding:**
-   - Make the change on the branch that owns the code as a **new commit** — one focused commit per finding, referencing it (`git commit` → `gt submit`). **Not `gt modify`/`git commit --amend`**: those rewrite the tip and force-push, squashing the fix into the prior commit and defeating the commit-by-commit review the user relies on. (`gt modify` is the `graphite` skill's default for shaping an _unsubmitted_ stack — not for review fixes.) A commit on top is a fast-forward; only Graphite's automatic child-restack force-pushes, and you never invoke it.
-   - **After each fix commit lands on the PR (i.e. is pushed):**
-     1. Post a top-level PR comment summarizing the fix:
-        ```bash
-        gh pr comment <num> --body "Fixed in <sha>: <one-line description of how it was fixed>"
-        ```
-     2. Reply directly to the review-agent's finding comment with the same fix reference, so the reviewer's thread is closed out:
-        ```bash
-        gh api repos/{owner}/{repo}/pulls/<num>/comments/<finding-comment-id>/replies \
-          -f body="Fixed in <sha>: <one-line description>"
-        ```
-        (For top-level issue comments rather than diff-line comments, post a follow-up issue comment quoting the finding instead.)
-   - Update the review ledger entry with the fix commit and the brief "how it was fixed" explanation you posted.
-
-   **For each Skip finding** (including the "unrealistic for this product" bucket from point 4) — **skipping is never silent.** Every finding you intentionally don't fix gets *both* durable records below before the review is retriggered, so the next round sees a deliberate decision rather than an oversight and doesn't re-raise the same point. A reply without the description entry lets the next round resurface it; a description entry without a reply leaves the reviewer's thread looking ignored. Do both, for every skip:
-
-   1. **Reply on the finding's own comment thread** with a short rationale, so the thread shows it was considered, not ignored. For a **diff-line** comment, reply to it directly:
-      ```bash
-      gh api repos/{owner}/{repo}/pulls/<num>/comments/<finding-comment-id>/replies \
-        -f body="Skipping: <one-line reason — e.g. 'this code path only runs from a single operator console; concurrency hardening isn't realistic for this product'>"
-      ```
-      For a **top-level issue comment** rather than a diff-line comment (Codex often posts its summary this way), post a follow-up issue comment that quotes the finding and gives the same rationale:
-      ```bash
-      gh pr comment <num> --body "Re: <quoted finding> — skipping: <one-line reason>"
-      ```
-
-   2. **Record the skip in the PR description** so the next review round doesn't resurface it. Maintain a `## Explicit skips` section at the bottom of the PR body and append a bullet for each skip: `<one-line finding summary> — <reason>`, with a link to the finding comment. Write the reason as durable context aimed at the **review agent**: enough that on its next pass it can either drop the point or push back with a new argument, instead of re-flagging it cold. Edit the PR body via:
-      ```bash
-      gh pr edit <num> --body "$(updated body)"
-      ```
-      If `gh pr edit` fails with a GitHub _"Projects (classic) is being deprecated"_ GraphQL error, don't treat it as a dead end — `gh pr edit` resolves classic-project fields and errors out account-wide once classic projects are sunset, so retrying it won't help. Edit the body (and title) via the REST API instead, which avoids that path:
-      ```bash
-      gh api -X PATCH repos/{owner}/{repo}/pulls/<num> -F body=@<file>   # add -f title="..." to also change the title
-      ```
-
-   3. **Update the review ledger** entry with the skip rationale you posted, so the final report (Step 6e / Step 8) carries it.
-
-7. **Retrigger the review.** Always retrigger after acting on a round, **including rounds where every finding was skipped** — the explicit skip rationales (in replies and in the PR description) need another pass so the reviewer can either drop those points or push back with new arguments. The only round that does not retrigger is one where there were zero findings to act on in the first place. For Codex:
-   ```bash
-   gh pr comment <num> --body "@codex review"
-   ```
-
-If a finding spans multiple PRs, fix on the lowest PR that owns the code so children inherit it when Graphite restacks them onto the updated parent.
-
-### 6e. Review complete — generate the final brief
-
-Once every watched PR is review-complete and the watcher has been torn down (see the watcher lifecycle above), first report the review outcome from the ledger before moving on. List every finding raised across the whole review, grouped by PR. For each one, briefly explain what the reviewer was worried about, then state whether it was **fixed** (including how, and the commit if available) or **skipped** (including why). If there were no findings at all, say that explicitly. This is the user's end-of-review audit trail; don't make them infer it from PR comments.
-
-After that, if the user has not already given a merge signal, invoke the `brief` skill if it's installed. With real PRs in place and review complete, it auto-detects FINAL mode and produces a visual HTML one-pager from the final history, the cumulative diff, the PR stack, and the review threads. Give the user the brief's path, then wait at the Step 7 merge gate. If the user already gave a merge signal, skip straight to Step 7. If `brief` isn't installed, skip this step.
-
-## Step 7 — Merge (gate)
-
-Merge-ready when the user gives an explicit merge signal — either:
-
-- said `merge` / `approved` / `ship it` / equivalent in chat, **or**
-- submitted an `APPROVED` PR review on any PR in the stack via GitHub. Detect with:
-  ```bash
-  USER=$(gh api user --jq '.login')
-  gh pr view <num> --json reviews \
-    --jq ".reviews[] | select(.author.login == \"$USER\" and .state == \"APPROVED\")"
-  ```
-  The agent doesn't continuously poll for this — once review is complete and the watcher has stopped (Step 6), it reports that the stack is ready and waits. Check for a GitHub approval when the user next engages, or act on a chat merge signal directly.
-
-The user signal is sufficient on its own — unresolved review-agent findings do not block merge once the user has explicitly approved (the user has seen them and chosen to ship anyway). A clean review without an explicit user signal is **not** enough.
-
-When approved:
-
-1. **Generate migrations** if the schema source changed. Use the project's standard generator in **create-only / generate** mode — never apply to the connected DB without explicit user approval. Commit the generated file onto the schema-owning PR, then resubmit the stack.
-
-   Then assess whether applying the migration **before** merging makes sense (e.g. the new code expects the schema and would break in shared environments otherwise; or the migration carries non-trivial transformations worth dry-running first). If yes, ask the user to confirm applying. **Block the merge until the user explicitly approves or declines applying.** If approved, apply via the project's standard apply command. If declined, proceed to merge with the migration file committed but unapplied.
-
-2. **Merge bottom-up via Graphite.** Confirm each PR's checks are green before merging it — the step-1 migration commit re-runs CI and can turn a green PR red. Fix red checks first; never silently merge red. Then merge the trunk-most PR first; Graphite restacks descendants automatically so each subsequent PR's base becomes `main`. Repeat until the stack is empty.
-3. **Apply the final Linear status transition** (see table above) and post the merge-complete log comment (see log table above).
-4. **Clean up local branches.** Prune branches that were merged into `main` (Graphite has a sync command for this). Then remove any leftover local branches that are no longer needed.
-5. **Clean up the worktree — conditionally.** Only remove it if the agent **created** it in Step 4. If the agent **reused** an existing worktree (the harness provided it), **leave it alone** — the harness owns that worktree's lifecycle and will tear it down itself.
-   ```bash
-   # Only if the agent created the worktree in Step 4:
-   cd <repo-root>
-   git worktree remove <path>
-   ```
-6. **Tear down the review watcher** if still running (see Step 6 watcher lifecycle).
-
-## Step 8 — Report
-
-Short summary: ticket id, merged PR URLs, and the review ledger: every finding with its brief explanation and whether it was fixed (how) or skipped (why).
-
----
+Present each finding as Fix or Skip with a one-liner why, but remember: it's a recommendation. The user makes the call.
 
 ## Rules
 
-- **When a request is vague or open to multiple interpretations — especially if the outcomes would differ significantly — ask clarifying questions before starting work.** Don't guess at scope or approach and build the wrong thing; a clarifying question is cheap, a wrong implementation is not.
-- **When current third-party docs are needed** for a library, framework, SDK, or service API, use the **Context7 MCP first** to resolve the correct library ID and fetch up-to-date, version-specific documentation and code examples from the source. Prefer this over model memory for setup steps, configuration, API usage, and code generation. Fall back to official docs or web search only if Context7 doesn't cover the need.
-- No AI attribution in commits, PR titles, or PR bodies.
-- **Never force-push. This is a hard rule, not a default.** Do not run `git push --force` / `--force-with-lease`, and do not pass any force/squash flag to Graphite (`gt submit --force`, `gt submit --squash`, or equivalent). The **only** force-push allowed is the implicit one Graphite performs on its own during a `restack` to realign a branch onto its updated parent — that is internal to Graphite's stacking and you never invoke it directly. If a push is rejected as non-fast-forward, **stop and ask the user** — do not reach for `--force` to get past it.
-  - **Why this matters to the user:** force-pushing rewrites the branch and collapses the work into a single squashed commit, destroying the per-commit history. The user reviews changes **commit by commit** and needs every incremental change to remain a distinct, inspectable commit on the PR. A force-push throws that away. Each implementation step and each review-finding fix must stay as its own commit (see Step 6, point 6) — pushed additively, never rewritten.
-- No `--no-verify` unless the user asks.
-- **Never create PRs in draft mode.** Every PR is opened ready for review — no `--draft` / Graphite draft flag — in both entry modes (see Step 6).
-- Review-finding fixes always land as separate commits on the PR branch — a new commit and `gt submit`, **never `gt modify`**/amend/squash unless the user explicitly asks. (`gt modify` is the `graphite` skill's default for shaping an unsubmitted stack; it doesn't apply once the stack is in review.)
-- **No silent skips.** Every review finding you intentionally don't fix gets two durable records before the next review is retriggered: a reply on its comment thread with the rationale, and an entry in the PR description's `## Explicit skips` section. The reply keeps the reviewer's thread from looking ignored; the description entry is what stops the next round from re-flagging the same issue (see Step 6, point 6).
-- If the plan turns out wrong mid-implementation, stop and re-confirm with the user.
-- If Linear MCP is unreachable mid-flow, surface the would-be status change in chat and ask the user to update Linear.
-- PR titles use conventional commits (`feat(scope): …`). PR bodies include `Closes <LINEAR-ID>` so Linear auto-closes on merge.
-- PR bodies for UI-affecting changes include **before/after screenshots** of the changed view (see Step 6). Omit only when there's nothing user-visible to show — an empty view from missing data means mock up data, not skip.
-- **Every PR stays green.** Fix failing CI checks with additive commits until they pass; a red PR is neither review-complete nor merge-ready (see Step 6). Only the user can waive a check that can't be fixed from the code.
+- Never force-push, never amend published commits — fixes are always new commits on top.
+- Never open PRs as drafts.
+- No AI attribution in commits or PR bodies.
+- Before/after screenshots in the PR body for anything user-visible.
+- Tear down any scheduled check-ins when the loop finishes or the user bails.
