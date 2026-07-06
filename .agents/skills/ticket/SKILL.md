@@ -7,7 +7,7 @@ description: Creates a new Linear issue from a free-form description. Drafts a s
 
 Create a Linear issue from a free-form description.
 
-This skill is the **upstream pair** of the `ship` skill: the issues it creates are the inputs `ship` picks up and implements end-to-end. Draft tickets so they read well as inputs to `ship` — clear scope, explicit acceptance criteria, and the plan-approval marker (see Step 3) when the user wants `ship` to gate on a plan review before implementing.
+This skill is the **upstream pair** of the `ship` / `ship-autonomous` skills: the issues it creates are the inputs they pick up and implement end-to-end. Draft tickets so they read well as inputs to those skills — clear scope, explicit acceptance criteria, and the plan-approval marker (see Step 3) when the user wants `ship-autonomous` to gate on a plan review before implementing.
 
 ## Required tools
 
@@ -51,7 +51,7 @@ This skill is the **upstream pair** of the `ship` skill: the issues it creates a
    - **Labels** — pick from existing labels only. Don't invent.
    - **Priority** — infer from language ("urgent", "blocker" → High; "nice to have" → Low). Default Medium.
    - **Assignee** — leave unassigned unless the user named one.
-   - **Plan-approval marker** — if the user says implementation should require plan approval before code is written, append a clear line to the description: `**Plan first: please post a plan and wait for approval before implementing.**` The `ship` skill scans the ticket for wording like this to decide whether to gate on a plan review.
+   - **Plan-approval marker** — if the user says implementation should require plan approval before code is written, append a clear line to the description: `**Plan first: please post a plan and wait for approval before implementing.**` The `ship-autonomous` skill scans the ticket for wording like this to decide whether to gate on a plan review.
 
 4. **Show the draft** in chat with title, body, team, project, labels, priority. **Wait for explicit approval.** Edit and re-show on requested changes.
 

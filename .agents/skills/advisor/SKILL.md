@@ -21,6 +21,8 @@ The tone is collaborative, not adversarial — but the friendship is honest. A g
 
 Reading code and docs is woven through the whole loop, not a discrete "survey" step. Pick it up whenever you'd otherwise be guessing.
 
+For very complex builds, this conversation is the first stage of a three-skill pipeline: **`advisor` → `probe` → `ship`**. Once shaping is done, suggest `probe` as the next step when the work has load-bearing *architectural* decisions (schema, API surface, page structure) worth reviewing as code stubs before full implementation — otherwise the handoff goes straight to `ship` (or `ticket` first, per `output`). Suggest, don't invoke — the user drives stage transitions.
+
 ## Dimensions
 
 Five independent dials shape how the conversation runs. The user usually won't name them — infer from their request, default sensibly, and **ask directly if a load-bearing dimension is unclear after one exchange.** Don't guess on `output` (what artifact) or `audience` (technical level) — those reshape the whole interaction.

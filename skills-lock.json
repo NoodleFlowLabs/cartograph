@@ -5,7 +5,7 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/advisor/SKILL.md",
-      "computedHash": "070c8608dff43816512aab4c035a42f667689501b690c16c644410b92d7be5f0"
+      "computedHash": "f1d42611515b49f0545a3fde4b6c0af58bb190220ac0099edd7c04ab4854e454"
     },
     "brief": {
       "source": "ilamanov/skills",
@@ -41,7 +41,7 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/ship/SKILL.md",
-      "computedHash": "6d988c54dbc01c9f2e9a41e8e1e014c79cb3f7bd9ea274d290a53338a2b5e8e7"
+      "computedHash": "4bc949239bbb3a1340b62e3de58103f624ab4ebca1be04eb6d0b18966c496e55"
     },
     "skill-cleaner": {
       "source": "ilamanov/skills",
@@ -65,7 +65,7 @@
       "source": "ilamanov/skills",
       "sourceType": "github",
       "skillPath": "skills/ticket/SKILL.md",
-      "computedHash": "ce6fd27800ccb034c97b00402a62bac256802bd597db5cfb3433b3cc90802ae9"
+      "computedHash": "f7cc5202e89f02155a56c19ff3badbfd750bc13a8392691a235aa973899127cd"
     },
     "vercel-react-best-practices": {
       "source": "vercel-labs/agent-skills",
