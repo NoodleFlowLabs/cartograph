@@ -57,9 +57,15 @@ Then split: snapshot the end state, rebuild branch by branch, each branch passin
 
 Codex reviews the PRs remotely. **Only Codex** — ignore CodeRabbit, Greptile, and any other bot entirely. Don't triage their comments, don't reply to them, don't let them block anything.
 
+**How to read Codex's signals.** Codex starts a review automatically when a PR is created — no need to tag it for the first round. Its status shows up as reactions:
+
+- 👀 on the PR description = review in progress. (On retriggered rounds, the 👀 also lands on the comment that triggered it.)
+- Findings → it posts a review comment and removes the 👀.
+- Clean → it posts 👍 on the PR description instead (and sometimes on the triggering comment). 👍 with no new comment means "no findings" — that's the clean bill for the round.
+
 The loop, per round:
 
-1. **Wait for findings.** Codex takes ~6–7 minutes, so schedule a check-in around then (ScheduleWakeup or whatever the harness gives you) rather than blocking or making the user ping you.
+1. **Wait for findings.** Codex takes ~6–7 minutes, so schedule a check-in around then (ScheduleWakeup or whatever the harness gives you) rather than blocking or making the user ping you. On each check-in, read the signals above — reactions on the PR description (and triggering comment) plus any new Codex comments — to tell in-progress / findings / clean apart.
 2. **Report, don't fix.** When findings land, print them for the user: each finding, a link, and your honest take on whether it's valid or not (see "Judging findings" below). Then **wait**. Never fix a finding without the user saying which ones to fix — not even the obviously-valid ones.
 3. **Act on the user's picks.** The default is fix-and-push: "fix it", "fix 1 and 3", or any plain approval means commit and push the fixes as new commits (never amend or force-push — the user reviews the PR commit by commit, and rewritten history destroys that), reply on each finding's thread ("Fixed in `<sha>`" for fixes, "Skipping: `<reason>`" for the rest), update the PR description with the skips (step 4), and retrigger the review (step 5). Every Codex comment gets closed out one way or the other — nothing left hanging.
 
